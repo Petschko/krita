@@ -128,8 +128,8 @@ private:
     KisRandomAccessorSP m_it;
 
     KoColor m_sourceColor;
-    const quint8 *m_data;
-    int m_pixelSize;
+    const quint8 *m_data {0};
+    int m_pixelSize {0};
 };
 
 class DifferencePolicySlow
@@ -253,9 +253,9 @@ private:
 class IsNonNullPolicySlow
 {
 public:
-    ALWAYS_INLINE void initDifferences(KisPaintDeviceSP device, const KoColor &srcPixel, int /*threshold*/) {
+    ALWAYS_INLINE void initDifferences(KisPaintDeviceSP device, const KoColor &srcPixel, int /*threshold*/)
+    {
         Q_UNUSED(srcPixel);
-
         m_pixelSize = device->pixelSize();
         m_testPixel.resize(m_pixelSize);
     }
@@ -268,7 +268,7 @@ public:
     }
 
 private:
-    int m_pixelSize;
+    int m_pixelSize {0};
     QByteArray m_testPixel;
 };
 
@@ -360,9 +360,9 @@ struct Q_DECL_HIDDEN KisScanlineFill::Private
 
     inline void swapDirection() {
         rowIncrement *= -1;
-        SANITY_ASSERT_MSG(forwardStack.isEmpty(),
-                          "FATAL: the forward stack must be empty "
-                          "on a direction swap");
+        KIS_SAFE_ASSERT_RECOVER_NOOP(forwardStack.isEmpty() &&
+                                     "FATAL: the forward stack must be empty "
+                                     "on a direction swap");
 
         forwardStack = QStack<KisFillInterval>(backwardMap.fetchAllIntervals(rowIncrement));
         backwardMap.clear();
@@ -549,10 +549,12 @@ void KisScanlineFill::runImpl(T &pixelPolicy)
     }
 }
 
-void KisScanlineFill::fillColor(const KoColor &fillColor)
+void KisScanlineFill::fillColor(const KoColor &originalFillColor)
 {
     KisRandomConstAccessorSP it = m_d->device->createRandomConstAccessorNG(m_d->startPoint.x(), m_d->startPoint.y());
     KoColor srcColor(it->rawDataConst(), m_d->device->colorSpace());
+    KoColor fillColor(originalFillColor);
+    fillColor.convertTo(m_d->device->colorSpace());
 
     const int pixelSize = m_d->device->pixelSize();
 
@@ -584,10 +586,12 @@ void KisScanlineFill::fillColor(const KoColor &fillColor)
     }
 }
 
-void KisScanlineFill::fillColor(const KoColor &fillColor, KisPaintDeviceSP externalDevice)
+void KisScanlineFill::fillColor(const KoColor &originalFillColor, KisPaintDeviceSP externalDevice)
 {
     KisRandomConstAccessorSP it = m_d->device->createRandomConstAccessorNG(m_d->startPoint.x(), m_d->startPoint.y());
     KoColor srcColor(it->rawDataConst(), m_d->device->colorSpace());
+    KoColor fillColor(originalFillColor);
+    fillColor.convertTo(m_d->device->colorSpace());
 
     const int pixelSize = m_d->device->pixelSize();
 

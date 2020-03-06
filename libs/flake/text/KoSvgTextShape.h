@@ -26,11 +26,10 @@
 #include <SvgShape.h>
 
 class KoSvgTextProperties;
-class KoSvgTextShapePrivate;
 
 #define KoSvgTextShape_SHAPEID "KoSvgTextShapeID"
 /**
- * KoSvgTextShape is a root chunk of the <text> element subtree.
+ * KoSvgTextShape is a root chunk of the \<text\> element subtree.
  */
 class KRITAFLAKE_EXPORT KoSvgTextShape : public KoSvgTextChunkShape
 {
@@ -41,8 +40,8 @@ public:
 
     KoShape* cloneShape() const override;
 
-    void paintComponent(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintContext) override;
-    void paintStroke(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintContext) override;
+    void paintComponent(QPainter &painter, KoShapePaintingContext &paintContext) const override;
+    void paintStroke(QPainter &painter, KoShapePaintingContext &paintContext) const override;
 
     /**
      * Reset the text shape into initial shape, removing all the child shapes
@@ -57,7 +56,7 @@ public:
      * chunks tree. The user should always call relayout() after every change
      * in the text shapes hierarchy.
      */
-    void relayout();
+    void relayout() const;
 
     QPainterPath textOutline();
 
@@ -71,7 +70,8 @@ protected:
     void shapeChanged(ChangeType type, KoShape *shape) override;
 
 private:
-    Q_DECLARE_PRIVATE(KoSvgTextShape)
+    class Private;
+    QScopedPointer<Private> d;
 };
 
 class KoSvgTextShapeFactory : public KoShapeFactoryBase

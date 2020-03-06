@@ -405,8 +405,10 @@ void KisScalarKeyframeChannel::uploadExternalKeyframe(KisKeyframeChannel *srcCha
     KIS_ASSERT_RECOVER_RETURN(srcFrame);
 
     KisScalarKeyframe *dstKey = dynamic_cast<KisScalarKeyframe*>(dstFrame.data());
-    dstKey->value = srcChannel->scalarValue(srcFrame);
-    notifyKeyframeChanged(dstFrame);
+    if (dstKey) {
+        dstKey->value = srcChannel->scalarValue(srcFrame);
+        notifyKeyframeChanged(dstFrame);
+    }
 }
 
 QRect KisScalarKeyframeChannel::affectedRect(KisKeyframeSP key)
@@ -442,7 +444,9 @@ void KisScalarKeyframeChannel::saveKeyframe(KisKeyframeSP keyframe, QDomElement 
 
 KisKeyframeSP KisScalarKeyframeChannel::loadKeyframe(const QDomElement &keyframeNode)
 {
-    int time = keyframeNode.toElement().attribute("time").toUInt();
+    int time = keyframeNode.toElement().attribute("time").toInt();
+    workaroundBrokenFrameTimeBug(&time);
+
     qreal value = KisDomUtils::toDouble(keyframeNode.toElement().attribute("value"));
 
     KUndo2Command tempParentCommand;

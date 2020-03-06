@@ -20,7 +20,7 @@
 
 #include <KoToolBase.h>
 #include <KoCanvasBase.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoShapeManager.h>
 #include <KoShape.h>
 #include "kis_assert.h"
@@ -43,7 +43,7 @@ struct ShapeGradientEditStrategy::Private
     QPointF start;
     QPointF initialOffset;
     KoShapeGradientHandles gradientHandles;
-    KoShapeGradientHandles::Handle::Type handleType;
+    KoShapeGradientHandles::Handle::Type handleType {KoShapeGradientHandles::Handle::Type::None};
     QScopedPointer<KUndo2Command> intermediateCommand;
 };
 

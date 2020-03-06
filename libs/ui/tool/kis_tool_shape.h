@@ -24,11 +24,13 @@
 #include <kconfig.h>
 #include <kconfiggroup.h>
 
+#include <kis_painter.h>
+
 #include "kis_tool_paint.h"
-#include "kis_painter.h"
+#include "KisSelectionToolFactoryBase.h"
+#include "KisToolShapeUtils.h"
+
 #include "ui_wdggeometryoptions.h"
-
-
 
 class KoCanvasBase;
 class KoPathShape;
@@ -66,10 +68,19 @@ public Q_SLOTS:
 protected:
     QWidget* createOptionWidget() override;
 
-    virtual KisPainter::FillStyle fillStyle();
-    KisPainter::StrokeStyle strokeStyle();
+    KisToolShapeUtils::FillStyle fillStyle();
+    KisToolShapeUtils::StrokeStyle strokeStyle();
 
     qreal currentStrokeWidth() const;
+
+    struct KRITAUI_EXPORT ShapeAddInfo {
+        bool shouldAddShape = false;
+        bool shouldAddSelectionShape = false;
+
+        void markAsSelectionShapeIfNeeded(KoShape *shape) const;
+    };
+
+    ShapeAddInfo shouldAddShape(KisNodeSP currentNode) const;
 
     void addShape(KoShape* shape);
 

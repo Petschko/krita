@@ -51,6 +51,7 @@
 #include "psd_layer_section.h"
 #include "psd_resource_block.h"
 #include "psd_image_data.h"
+#include "kis_image_barrier_locker.h"
 
 PSDLoader::PSDLoader(KisDocument *doc)
     : m_image(0)
@@ -63,16 +64,16 @@ PSDLoader::~PSDLoader()
 {
 }
 
-KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
+KisImportExportErrorCode PSDLoader::decode(QIODevice *io)
 {
     // open the file
 
     dbgFile << "pos:" << io->pos();
 
     PSDHeader header;
-    if (!header.read(   io)) {
+    if (!header.read(io)) {
         dbgFile << "failed reading header: " << header.error;
-        return KisImageBuilder_RESULT_FAILURE;
+        return ImportExportCodes::FileFormatIncorrect;
     }
 
     dbgFile << header;
@@ -81,7 +82,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
     PSDColorModeBlock colorModeBlock(header.colormode);
     if (!colorModeBlock.read(io)) {
         dbgFile << "failed reading colormode block: " << colorModeBlock.error;
-        return KisImageBuilder_RESULT_FAILURE;
+        return ImportExportCodes::FileFormatIncorrect;
     }
 
     dbgFile << "Read color mode block. pos:" << io->pos();
@@ -89,14 +90,14 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
     PSDImageResourceSection resourceSection;
     if (!resourceSection.read(io)) {
         dbgFile << "failed image reading resource section: " << resourceSection.error;
-        return KisImageBuilder_RESULT_FAILURE;
+        return ImportExportCodes::FileFormatIncorrect;
     }
     dbgFile << "Read image resource section. pos:" << io->pos();
 
     PSDLayerMaskSection layerSection(header);
     if (!layerSection.read(io)) {
         dbgFile << "failed reading layer/mask section: " << layerSection.error;
-        return KisImageBuilder_RESULT_FAILURE;
+        return ImportExportCodes::FileFormatIncorrect;
     }
     dbgFile << "Read layer/mask section. " << layerSection.nLayers << "layers. pos:" << io->pos();
 
@@ -108,7 +109,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
                                                                          header.channelDepth);
     if (colorSpaceId.first.isNull()) {
         dbgFile << "Unsupported colorspace" << header.colormode << header.channelDepth;
-        return KisImageBuilder_RESULT_UNSUPPORTED_COLORSPACE;
+        return ImportExportCodes::FormatColorSpaceUnsupported;
     }
 
     // Get the icc profile from the image resource section
@@ -127,7 +128,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
     // Create the colorspace
     const KoColorSpace* cs = KoColorSpaceRegistry::instance()->colorSpace(colorSpaceId.first, colorSpaceId.second, profile);
     if (!cs) {
-        return KisImageBuilder_RESULT_UNSUPPORTED_COLORSPACE;
+        return ImportExportCodes::FormatColorSpaceUnsupported;
     }
 
     // Creating the KisImage
@@ -135,7 +136,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
     QString name = file ? file->fileName() : "Imported";
     m_image = new KisImage(m_doc->createUndoStore(),  header.width, header.height, cs, name);
     Q_CHECK_PTR(m_image);
-    m_image->lock();
+    KisImageBarrierLocker locker(m_image);
 
     // set the correct resolution
     if (resourceSection.resources.contains(PSDImageResourceSection::RESN_INFO)) {
@@ -166,7 +167,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
     // Read the projection into our single layer. Since we only read the projection when
     // we have just one layer, we don't need to later on apply the alpha channel of the
     // first layer to the projection if the number of layers is negative/
-    // See http://www.adobe.com/devnet-apps/photoshop/fileformatashtml/#50577409_16000.
+    // See https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/#50577409_16000.
     if (layerSection.nLayers == 0) {
         dbgFile << "Position" << io->pos() << "Going to read the projection into the first layer, which Photoshop calls 'Background'";
 
@@ -178,8 +179,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
         m_image->addNode(layer, m_image->rootLayer());
 
         // Only one layer, the background layer, so we're done.
-        m_image->unlock();
-        return KisImageBuilder_RESULT_OK;
+        return ImportExportCodes::OK;
     }
 
     // More than one layer, so now construct the Krita image from the info we read.
@@ -238,7 +238,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
                 QString compositeOp = psd_blendmode_to_composite_op(layerRecord->infoBlocks.sectionDividerBlendMode);
 
                 // Krita doesn't support pass-through blend
-                // mode. Instead it is just a property of a goupr
+                // mode. Instead it is just a property of a group
                 // layer, so flip it
                 if (compositeOp == COMPOSITE_PASS_THROUGH) {
                     compositeOp = COMPOSITE_OVER;
@@ -262,7 +262,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
                 warnKrita << "WARNING: Provided PSD has unbalanced group "
                           << "layer markers. Some masks and/or layers can "
                           << "be lost while loading this file. Please "
-                          << "report a bug to Krita developes and attach "
+                          << "report a bug to Krita developers and attach "
                           << "this file to the bugreport\n"
                           << "    " << ppVar(layerRecord->layerName) << "\n"
                           << "    " << ppVar(layerRecord->infoBlocks.sectionDividerType) << "\n"
@@ -282,7 +282,7 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
 
             if (!layerRecord->readPixelData(io, layer->paintDevice())) {
                 dbgFile << "failed reading channels for layer: " << layerRecord->layerName << layerRecord->error;
-                return KisImageBuilder_RESULT_FAILURE;
+                return ImportExportCodes::FileFormatIncorrect;
             }
             if (!groupStack.isEmpty()) {
                 m_image->addNode(layer, groupStack.top());
@@ -356,12 +356,10 @@ KisImageBuilder_Result PSDLoader::decode(QIODevice *io)
         server->addResource(collection, false);
     }
 
-
-    m_image->unlock();
-    return KisImageBuilder_RESULT_OK;
+    return ImportExportCodes::OK;
 }
 
-KisImageBuilder_Result PSDLoader::buildImage(QIODevice *io)
+KisImportExportErrorCode PSDLoader::buildImage(QIODevice *io)
 {
     return decode(io);
 }

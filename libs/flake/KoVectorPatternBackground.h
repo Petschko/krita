@@ -21,12 +21,12 @@
 
 #include <KoShapeBackground.h>
 #include <KoFlakeCoordinateSystem.h>
+#include <QSharedDataPointer>
 
 class KoShape;
 class QPointF;
 class QRectF;
 class QTransform;
-class KoVectorPatternBackgroundPrivate;
 
 
 class KoVectorPatternBackground : public KoShapeBackground
@@ -55,14 +55,13 @@ public:
     void setShapes(const QList<KoShape*> value);
     QList<KoShape*> shapes() const;
 
-    void paint(QPainter &painter, const KoViewConverter &converter_Unused, KoShapePaintingContext &context_Unused, const QPainterPath &fillPath) const override;
+    void paint(QPainter &painter, KoShapePaintingContext &context_Unused, const QPainterPath &fillPath) const override;
     bool hasTransparency() const override;
     void fillStyle(KoGenStyle &style, KoShapeSavingContext &context) override;
     bool loadStyle(KoOdfLoadingContext &context, const QSizeF &shapeSize) override;
-
 private:
-    Q_DECLARE_PRIVATE(KoVectorPatternBackground)
-    Q_DISABLE_COPY(KoVectorPatternBackground)
+    class Private;
+    QSharedDataPointer<Private> d;
 };
 
 #endif // KOVECTORPATTERNBACKGROUND_H

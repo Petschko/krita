@@ -21,7 +21,7 @@
 
 #include <KoDialog.h>
 #include <KoColorSet.h>
-#include <KisColorsetChooser.h>
+#include <KisPaletteListWidget.h>
 #include <kis_types.h>
 
 #include "wdg_layersplit.h"
@@ -48,15 +48,17 @@ public:
     bool disregardOpacity() const;
     int fuzziness() const;
     KoColorSet* palette() const;
+    bool modeToMask;
 
 private Q_SLOTS:
 
-    void applyClicked();
+    void slotApplyClicked();
     void slotSetPalette(KoColorSet *pal);
+    void slotChangeMode(int);
 
 private:
     WdgLayerSplit *m_page {0};
-    KisColorsetChooser *m_colorSetChooser {0};
+    KisPaletteListWidget *m_colorSetChooser {0};
     KoColorSet *m_palette {0};
 };
 

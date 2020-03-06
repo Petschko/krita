@@ -82,6 +82,15 @@ public:
      * the correct configuration applied.
      */
     QColor colorForCanvas(Canvas *canvas) const;
+
+    /**
+     * @brief fromQColor is the (approximate) reverse of colorForCanvas()
+     * @param qcolor the QColor to convert to a KoColor.
+     * @param canvas the canvas whose color management you'd like to use.
+     * @return the approximated ManagedColor, to use for canvas resources.
+     */
+    static ManagedColor *fromQColor(const QColor &qcolor, Canvas *canvas = 0);
+
     /**
      * colorDepth A string describing the color depth of the image:
      * <ul>
@@ -173,15 +182,15 @@ public:
 
     /**
      * Serialize this color following Create's swatch color specification available
-     * at http://create.freedesktop.org/wiki/index.php/Swatches_-_colour_file_format
+     * at https://web.archive.org/web/20110826002520/http://create.freedesktop.org/wiki/Swatches_-_colour_file_format/Draft
      */
     QString toXML() const;
 
     /**
      * Unserialize a color following Create's swatch color specification available
-     * at http://create.freedesktop.org/wiki/index.php/Swatches_-_colour_file_format
+     * at https://web.archive.org/web/20110826002520/http://create.freedesktop.org/wiki/Swatches_-_colour_file_format/Draft
      *
-     * @param XXX
+     * @param xml an XML color
      *
      * @return the unserialized color, or an empty color object if the function failed
      *         to unserialize the color
@@ -190,7 +199,6 @@ public:
 
     /**
      * @brief toQString create a user-visible string of the channel names and the channel values
-     * @param color the color to create the string from
      * @return a string that can be used to display the values of this color to the user.
      */
     QString toQString();
@@ -200,6 +208,8 @@ private:
 
     friend class View;
     friend class PaletteView;
+    friend class Swatch;
+
     KoColor color() const;
 
     struct Private;

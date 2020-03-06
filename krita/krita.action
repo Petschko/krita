@@ -170,6 +170,19 @@
 
     <Action name="buginfo">
       <icon></icon>
+      <text>Show Krita log for bug reports.</text>
+      <whatsThis></whatsThis>
+      <toolTip>Show Krita log for bug reports.</toolTip>
+      <iconText>Show Krita log for bug reports.</iconText>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+
+    <Action name="sysinfo">
+      <icon></icon>
+
+
       <text>Show system information for bug reports.</text>
       <whatsThis></whatsThis>
       <toolTip>Show system information for bug reports.</toolTip>
@@ -225,6 +238,42 @@
       <activationFlags>10000000000</activationFlags>
       <activationConditions>100</activationConditions>
       <shortcut>Ctrl+Shift+I</shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="create_snapshot">
+      <icon></icon>
+      <text>Create Snapshot</text>
+      <whatsThis></whatsThis>
+      <toolTip>Create Snapshot</toolTip>
+      <iconText></iconText>
+      <activationFlags>1</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="switchto_snapshot">
+      <icon></icon>
+      <text>Switch to Selected Snapshot</text>
+      <whatsThis></whatsThis>
+      <toolTip>Switch to selected snapshot</toolTip>
+      <iconText></iconText>
+      <activationFlags>1</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="remove_snapshot">
+      <icon></icon>
+      <text>Remove Selected Snapshot</text>
+      <whatsThis></whatsThis>
+      <toolTip>Remove Selected Snapshot</toolTip>
+      <iconText></iconText>
+      <activationFlags>1</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>
@@ -474,7 +523,7 @@
     </Action>
    <Action name="mirrorX-moveToCenter">
       <icon></icon>
-      <text>Move to Canvas Center</text>
+      <text>Move to Canvas Center X</text>
       <whatsThis></whatsThis>
       <toolTip>Move to Canvas Center X</toolTip>
       <iconText>Move to Canvas Center X</iconText>
@@ -563,6 +612,46 @@
       <toolTip>Swap Foreground and Background Color</toolTip>
       <iconText>Swap Foreground and Background Color</iconText>
       <shortcut>X</shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="selection_tool_mode_add">
+      <icon></icon>
+      <text>Selection Mode: Add</text>
+      <whatsThis></whatsThis>
+      <toolTip>Selection Mode: Add</toolTip>
+      <iconText>Selection Mode: Add</iconText>
+      <shortcut>A</shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="selection_tool_mode_subtract">
+      <icon></icon>
+      <text>Selection Mode: Subtract</text>
+      <whatsThis></whatsThis>
+      <toolTip>Selection Mode: Subtract</toolTip>
+      <iconText>Selection Mode: Subtract</iconText>
+      <shortcut>S</shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="selection_tool_mode_intersect">
+      <icon></icon>
+      <text>Selection Mode: Intersect</text>
+      <whatsThis></whatsThis>
+      <toolTip>Selection Mode: Intersect</toolTip>
+      <iconText>Selection Mode: Intersect</iconText>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="selection_tool_mode_replace">
+      <icon></icon>
+      <text>Selection Mode: Replace</text>
+      <whatsThis></whatsThis>
+      <toolTip>Selection Mode: Replace</toolTip>
+      <iconText>Selection Mode: Replace</iconText>
+      <shortcut>R</shortcut>
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>
@@ -694,18 +783,6 @@
       <iconText>Convert to Shape</iconText>
       <activationFlags>10000000000</activationFlags>
       <activationConditions>0</activationConditions>
-      <shortcut></shortcut>
-      <isCheckable>false</isCheckable>
-      <statusTip></statusTip>
-    </Action>
-    <Action name="select_opaque">
-      <icon></icon>
-      <text>&amp;Select Opaque</text>
-      <whatsThis></whatsThis>
-      <toolTip>Select Opaque</toolTip>
-      <iconText>Select Opaque</iconText>
-      <activationFlags>100000</activationFlags>
-      <activationConditions>100</activationConditions>
       <shortcut></shortcut>
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
@@ -903,6 +980,18 @@
       <activationFlags>10000</activationFlags>
       <activationConditions>0</activationConditions>
       <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="krita_filter_invert">
+      <icon></icon>
+      <text>&amp;Invert</text>
+      <whatsThis></whatsThis>
+      <toolTip>Invert</toolTip>
+      <iconText>Invert</iconText>
+      <activationFlags>10000</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut>Ctrl+I</shortcut>
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>
@@ -1369,7 +1458,7 @@
       <icon></icon>
       <text>Bezier Curve Selection Tool</text>
       <whatsThis></whatsThis>
-      <toolTip>Select a </toolTip>
+      <toolTip>Bezier Curve Selection Tool</toolTip>
       <iconText>Bezier Curve Selection Tool</iconText>
       <shortcut></shortcut>
       <isCheckable>false</isCheckable>
@@ -1379,7 +1468,7 @@
       <icon></icon>
       <text>Similar Color Selection Tool</text>
       <whatsThis></whatsThis>
-      <toolTip>Select a </toolTip>
+      <toolTip>Similar Color Selection Tool</toolTip>
       <iconText>Similar Color Selection Tool</iconText>
       <shortcut></shortcut>
       <isCheckable>false</isCheckable>
@@ -1611,16 +1700,6 @@
       <whatsThis></whatsThis>
       <toolTip>Assistant Tool</toolTip>
       <iconText>Assistant Tool</iconText>
-      <shortcut></shortcut>
-      <isCheckable>false</isCheckable>
-      <statusTip></statusTip>
-    </Action>
-    <Action name="KritaShape/KisToolText">
-      <icon></icon>
-      <text>Text tool</text>
-      <whatsThis></whatsThis>
-      <toolTip>Text tool</toolTip>
-      <iconText>Text tool</iconText>
       <shortcut></shortcut>
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
@@ -2365,6 +2444,35 @@
       <statusTip></statusTip>
     </Action>
 
+
+    <Action name="insert_opacity_keyframe">
+      <icon></icon>
+      <text>Add opacity keyframe</text>
+      <whatsThis></whatsThis>
+      <toolTip>Adds keyframe to control layer opacity</toolTip>
+      <iconText></iconText>
+      <activationFlags>100000</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+
+
+    <Action name="remove_opacity_keyframe">
+      <icon></icon>
+      <text>Remove opacity keyframe</text>
+      <whatsThis></whatsThis>
+      <toolTip>Removes keyframe to control layer opacity</toolTip>
+      <iconText></iconText>
+      <activationFlags>100000</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+
+
     <Action name="mirror_frames">
       <icon></icon>
       <text>Mirror Frames</text>
@@ -2986,7 +3094,19 @@
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>
-    <Action name="convert_layer_to_file_layer">
+        <Action name="convert_to_animated">
+      <icon></icon>
+      <text>Convert to &amp;animated layer</text>
+      <whatsThis></whatsThis>
+      <toolTip>Convert layer into animation frames</toolTip>
+      <iconText>Convert layer into animation frames</iconText>
+      <activationFlags>100000</activationFlags>
+      <activationConditions>0</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="convert_to_file_layer">
       <icon>fileLayer</icon>
       <text>to &amp;File Layer</text>
       <whatsThis></whatsThis>
@@ -3262,6 +3382,102 @@
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>
+    <Action name="mirrorAllNodesX">
+      <icon>symmetry-horizontal</icon>
+      <text>Mirror All Layers Hori&amp;zontally</text>
+      <whatsThis></whatsThis>
+      <toolTip>Mirror All Layers Horizontally</toolTip>
+      <iconText>Mirror All Layers Horizontally</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="mirrorAllNodesY">
+      <icon>symmetry-vertical</icon>
+      <text>Mirror All Layers &amp;Vertically</text>
+      <whatsThis></whatsThis>
+      <toolTip>Mirror All Layers Vertically</toolTip>
+      <iconText>Mirror All Layers Vertically</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="rotateAllLayers">
+      <icon></icon>
+      <text>&amp;Rotate All Layers...</text>
+      <whatsThis></whatsThis>
+      <toolTip>Rotate All Layers</toolTip>
+      <iconText>Rotate All Layers</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="rotateAllLayersCW90">
+      <icon>object-rotate-right</icon>
+      <text>Rotate All &amp;Layers 90° to the Right</text>
+      <whatsThis></whatsThis>
+      <toolTip>Rotate All Layers 90° to the Right</toolTip>
+      <iconText>Rotate All Layers 90° to the Right</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="rotateAllLayersCCW90">
+      <icon>object-rotate-left</icon>
+      <text>Rotate All Layers &amp;90° to the Left</text>
+      <whatsThis></whatsThis>
+      <toolTip>Rotate All Layers 90° to the Left</toolTip>
+      <iconText>Rotate All Layers 90° to the Left</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="rotateAllLayers180">
+      <icon></icon>
+      <text>Rotate All Layers &amp;180°</text>
+      <whatsThis></whatsThis>
+      <toolTip>Rotate All Layers 180°</toolTip>
+      <iconText>Rotate All Layers 180°</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="scaleAllLayers">
+      <icon></icon>
+      <text>Scale All &amp;Layers to new Size...</text>
+      <whatsThis></whatsThis>
+      <toolTip>Scale All Layers to new Size</toolTip>
+      <iconText>Scale All Layers to new Size</iconText>
+      <activationFlags>100000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="shearAllLayers">
+      <icon></icon>
+      <text>&amp;Shear All Layers...</text>
+      <whatsThis></whatsThis>
+      <toolTip>Shear All Layers</toolTip>
+      <iconText>Shear All Layers</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
     <Action name="offsetlayer">
       <icon></icon>
       <text>&amp;Offset Layer...</text>
@@ -3459,6 +3675,18 @@
       <activationFlags>1000</activationFlags>
       <activationConditions>1</activationConditions>
       <shortcut>F3</shortcut>
+      <isCheckable>false</isCheckable>
+      <statusTip></statusTip>
+    </Action>
+    <Action name="set-copy-from">
+      <icon></icon>
+      <text>Set Copy F&amp;rom...</text>
+      <whatsThis></whatsThis>
+      <toolTip>Set the source for the selected clone layer(s).</toolTip>
+      <iconText>Set Copy From</iconText>
+      <activationFlags>1000</activationFlags>
+      <activationConditions>1</activationConditions>
+      <shortcut></shortcut>
       <isCheckable>false</isCheckable>
       <statusTip></statusTip>
     </Action>

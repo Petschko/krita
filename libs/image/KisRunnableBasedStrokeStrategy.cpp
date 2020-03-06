@@ -32,10 +32,10 @@ struct KisRunnableBasedStrokeStrategy::JobsInterface : public KisRunnableStrokeJ
     }
 
 
-    void addRunnableJobs(const QVector<KisRunnableStrokeJobData*> &list) {
+    void addRunnableJobs(const QVector<KisRunnableStrokeJobDataBase*> &list) {
         QVector<KisStrokeJobData*> newList;
 
-        Q_FOREACH (KisRunnableStrokeJobData *item, list) {
+        Q_FOREACH (KisRunnableStrokeJobDataBase *item, list) {
             newList.append(item);
         }
 
@@ -47,7 +47,7 @@ private:
 };
 
 
-KisRunnableBasedStrokeStrategy::KisRunnableBasedStrokeStrategy(QString id, const KUndo2MagicString &name)
+KisRunnableBasedStrokeStrategy::KisRunnableBasedStrokeStrategy(const QLatin1String &id, const KUndo2MagicString &name)
     : KisSimpleStrokeStrategy(id, name),
       m_jobsInterface(new JobsInterface(this))
 {
@@ -67,7 +67,7 @@ void KisRunnableBasedStrokeStrategy::doStrokeCallback(KisStrokeJobData *data)
 {
     if (!data) return;
 
-    KisRunnableStrokeJobData *runnable = dynamic_cast<KisRunnableStrokeJobData*>(data);
+    KisRunnableStrokeJobDataBase *runnable = dynamic_cast<KisRunnableStrokeJobDataBase*>(data);
     if (!runnable) return;
 
     runnable->run();

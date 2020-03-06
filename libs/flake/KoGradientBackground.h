@@ -24,9 +24,9 @@
 #include "kritaflake_export.h"
 
 #include <QTransform>
+#include <QSharedDataPointer>
 
 class QGradient;
-class KoGradientBackgroundPrivate;
 
 /// A gradient shape background
 class KRITAFLAKE_EXPORT KoGradientBackground : public KoShapeBackground
@@ -65,15 +65,14 @@ public:
     const QGradient *gradient() const;
 
     /// reimplemented from KoShapeBackground
-    void paint(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &context, const QPainterPath &fillPath) const override;
+    void paint(QPainter &painter, KoShapePaintingContext &context, const QPainterPath &fillPath) const override;
     /// reimplemented from KoShapeBackground
     void fillStyle(KoGenStyle &style, KoShapeSavingContext &context) override;
     /// reimplemented from KoShapeBackground
     bool loadStyle(KoOdfLoadingContext &context, const QSizeF &shapeSize) override;
-
 private:
-    Q_DECLARE_PRIVATE(KoGradientBackground)
-    Q_DISABLE_COPY(KoGradientBackground)
+    class Private;
+    QSharedDataPointer<Private> d;
 };
 
 #endif // KOGRADIENTBACKGROUND_H

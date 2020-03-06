@@ -77,7 +77,7 @@ public:
      * @param viewConverter the viewconverter for converting between
      *                       window and document coordinates.
      */
-    KisCanvas2(KisCoordinatesConverter *coordConverter, KoCanvasResourceManager *resourceManager, KisView *view, KoShapeControllerBase *sc);
+    KisCanvas2(KisCoordinatesConverter *coordConverter, KoCanvasResourceProvider *resourceManager, KisMainWindow *mainWindow, KisView *view, KoShapeControllerBase *sc);
 
     ~KisCanvas2() override;
 
@@ -119,6 +119,13 @@ public: // KoCanvasBase implementation
      * Return the shape manager associated with this canvas
      */
     KoShapeManager *globalShapeManager() const;
+
+    /**
+     * Return shape manager associated with the currently active node.
+     * If current node has no internal shape manager, return null.
+     */
+    KoShapeManager *localShapeManager() const;
+
 
     void updateCanvas(const QRectF& rc) override;
 
@@ -215,7 +222,7 @@ public: // KisCanvas2 methods
     QRect regionOfInterest() const;
 
     /**
-     * Set aftificial limit outside which the image will not be rendered
+     * Set artificial limit outside which the image will not be rendered
      * \p rc is measured in image pixels
      */
     void setRenderingLimit(const QRect &rc);
@@ -258,10 +265,6 @@ public Q_SLOTS:
 
     void channelSelectionChanged();
 
-    /**
-     * Called whenever the display monitor profile resource changes
-     */
-    void slotSetDisplayProfile(const KoColorProfile *profile);
     void startUpdateInPatches(const QRect &imageRect);
 
     void slotTrySwitchShapeManager();
@@ -279,6 +282,9 @@ private Q_SLOTS:
     void startUpdateCanvasProjection(const QRect & rc);
     void updateCanvasProjection();
 
+    void slotBeginUpdatesBatch();
+    void slotEndUpdatesBatch();
+    void slotSetLodUpdatesBlocked(bool value);
 
     /**
      * Called whenever the view widget needs to show a different part of
@@ -298,6 +304,7 @@ private Q_SLOTS:
 
     void slotReferenceImagesChanged();
 
+    void slotImageColorSpaceChanged();
 public:
 
     bool isPopupPaletteVisible() const;
@@ -324,6 +331,7 @@ private:
     void updateCanvasWidgetImpl(const QRect &rc = QRect());
     void setCanvasWidget(KisAbstractCanvasWidget *widget);
     void resetCanvas(bool useOpenGL);
+    void setDisplayProfile(const KoColorProfile *profile);
 
     void notifyLevelOfDetailChange();
 

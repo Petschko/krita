@@ -100,8 +100,13 @@ void KisPerChannelConfigWidget::updateChannelControls()
     case KoChannelInfo::FLOAT64:
     default:
         //Hack Alert: should be changed to float
-        min = 0;
-        max = 100;
+        if (m_dev->colorSpace()->colorModelId() == LABAColorModelID || m_dev->colorSpace()->colorModelId() == CMYKAColorModelID) {
+            min = m_dev->colorSpace()->channels()[m_activeVChannel]->getUIMin();
+            max = m_dev->colorSpace()->channels()[m_activeVChannel]->getUIMax();
+        } else {
+            min = 0;
+            max = 100;
+        }
         break;
     }
 
@@ -149,7 +154,7 @@ KisPerChannelFilter::KisPerChannelFilter() : KisMultiChannelFilter(id(), i18n("&
     setShortcut(QKeySequence(Qt::CTRL + Qt::Key_M));
 }
 
-KisConfigWidget * KisPerChannelFilter::createConfigurationWidget(QWidget *parent, const KisPaintDeviceSP dev) const
+KisConfigWidget * KisPerChannelFilter::createConfigurationWidget(QWidget *parent, const KisPaintDeviceSP dev, bool) const
 {
     return new KisPerChannelConfigWidget(parent, dev);
 }
@@ -175,9 +180,10 @@ KoColorTransformation* KisPerChannelFilter::createTransformation(const KoColorSp
      * transforms in display order? Why on Earth it works?! Is it
      * documented anywhere?
      */
-    const QVector<VirtualChannelInfo> virtualChannels = KisMultiChannelFilter::getVirtualChannels(cs);
+    const QVector<VirtualChannelInfo> virtualChannels =
+        KisMultiChannelFilter::getVirtualChannels(cs, originalTransfers.size());
 
-    if (originalTransfers.size() != int(virtualChannels.size())) {
+    if (originalTransfers.size() > int(virtualChannels.size())) {
         // We got an illegal number of colorchannels :(
         return 0;
     }

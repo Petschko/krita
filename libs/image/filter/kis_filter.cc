@@ -87,7 +87,7 @@ void KisFilter::process(const KisPaintDeviceSP src,
 
         processImpl(temporary, applyRect, config, progressUpdater);
     }
-    catch (std::bad_alloc) {
+    catch (const std::bad_alloc&) {
         warnKrita << "Filter" << name() << "failed to allocate enough memory to run.";
     }
 
@@ -130,4 +130,15 @@ bool KisFilter::needsTransparentPixels(const KisFilterConfigurationSP config, co
     Q_UNUSED(cs);
 
     return false;
+}
+
+bool KisFilter::configurationAllowedForMask(KisFilterConfigurationSP config) const
+{
+    Q_UNUSED(config);
+    return supportsAdjustmentLayers();
+}
+
+void KisFilter::fixLoadedFilterConfigurationForMasks(KisFilterConfigurationSP config) const
+{
+    Q_UNUSED(config);
 }

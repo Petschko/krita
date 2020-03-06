@@ -35,7 +35,7 @@ KisToolSelectPath::KisToolSelectPath(KoCanvasBase * canvas)
     : KisToolSelectBase<KisDelegatedSelectPathWrapper>(canvas,
                                                        KisCursor::load("tool_polygonal_selection_cursor.png", 6, 6),
                                                        i18n("Select path"),
-                                                       (KisTool*) (new __KisToolSelectPathLocalTool(canvas, this)))
+                                                       new __KisToolSelectPathLocalTool(canvas, this))
 {
 }
 
@@ -47,12 +47,6 @@ void KisToolSelectPath::requestStrokeEnd()
 void KisToolSelectPath::requestStrokeCancellation()
 {
     localTool()->cancelPath();
-}
-
-void KisToolSelectPath::mousePressEvent(KoPointerEvent* event)
-{
-    if (!selectionEditable()) return;
-    DelegatedSelectPathTool::mousePressEvent(event);
 }
 
 // Install an event filter to catch right-click events.
@@ -90,34 +84,56 @@ QList<QPointer<QWidget> > KisToolSelectPath::createOptionWidgets()
     return filteredWidgets;
 }
 
-void KisToolSelectPath::setAlternateSelectionAction(SelectionAction action)
-{
-    // We will turn off the ability to change the selection in the middle of drawing a path.
-    if (!m_localTool->listeningToModifiers()) {
-        KisToolSelectBase<KisDelegatedSelectPathWrapper>::setAlternateSelectionAction(action);
-    }
-}
-
-bool KisDelegatedSelectPathWrapper::listeningToModifiers() {
-    return m_localTool->listeningToModifiers();
-}
-
 void KisDelegatedSelectPathWrapper::beginPrimaryAction(KoPointerEvent *event) {
-    mousePressEvent(event);
+    DelegatedSelectPathTool::mousePressEvent(event);
 }
 
 void KisDelegatedSelectPathWrapper::continuePrimaryAction(KoPointerEvent *event){
-    mouseMoveEvent(event);
+    DelegatedSelectPathTool::mouseMoveEvent(event);
 }
 
 void KisDelegatedSelectPathWrapper::endPrimaryAction(KoPointerEvent *event) {
-    mouseReleaseEvent(event);
+    DelegatedSelectPathTool::mouseReleaseEvent(event);
+}
+
+void KisDelegatedSelectPathWrapper::beginPrimaryDoubleClickAction(KoPointerEvent *event)
+{
+    DelegatedSelectPathTool::mouseDoubleClickEvent(event);
+}
+
+void KisDelegatedSelectPathWrapper::mousePressEvent(KoPointerEvent *event)
+{
+    // this event will be forwarded using beginPrimaryAction
+    Q_UNUSED(event);
+}
+
+void KisDelegatedSelectPathWrapper::mouseMoveEvent(KoPointerEvent *event)
+{
+    DelegatedSelectPathTool::mouseMoveEvent(event);
+}
+
+void KisDelegatedSelectPathWrapper::mouseReleaseEvent(KoPointerEvent *event)
+{
+    // this event will be forwarded using continuePrimaryAction
+    Q_UNUSED(event);
+}
+
+void KisDelegatedSelectPathWrapper::mouseDoubleClickEvent(KoPointerEvent *event)
+{
+    // this event will be forwarded using endPrimaryAction
+    Q_UNUSED(event);
+}
+
+bool KisDelegatedSelectPathWrapper::hasUserInteractionRunning() const
+{
+    return localTool()->pathStarted();
 }
 
 
 __KisToolSelectPathLocalTool::__KisToolSelectPathLocalTool(KoCanvasBase * canvas, KisToolSelectPath* parentTool)
     : KoCreatePathTool(canvas), m_selectionTool(parentTool)
 {
+    setEnableClosePathShortcut(false);
 }
 
 void __KisToolSelectPathLocalTool::paintPath(KoPathShape &pathShape, QPainter &painter, const KoViewConverter &converter)
@@ -146,7 +162,12 @@ void __KisToolSelectPathLocalTool::addPathShape(KoPathShape* pathShape)
 
     KisSelectionToolHelper helper(kisCanvas, kundo2_i18n("Select by Bezier Curve"));
 
-    if (m_selectionTool->selectionMode() == PIXEL_SELECTION) {
+    const SelectionMode mode =
+        helper.tryOverrideSelectionMode(kisCanvas->viewManager()->selection(),
+                                        m_selectionTool->selectionMode(),
+                                        m_selectionTool->selectionAction());
+
+    if (mode == PIXEL_SELECTION) {
 
         KisPixelSelectionSP tmpSel = KisPixelSelectionSP(new KisPixelSelection());
 
@@ -168,7 +189,18 @@ void __KisToolSelectPathLocalTool::addPathShape(KoPathShape* pathShape)
 
         delete pathShape;
     } else {
-        helper.addSelectionShape(pathShape);
+        helper.addSelectionShape(pathShape, m_selectionTool->selectionAction());
+    }
+}
+
+void KisToolSelectPath::resetCursorStyle()
+{
+    if (selectionAction() == SELECTION_ADD) {
+        useCursor(KisCursor::load("tool_polygonal_selection_cursor_add.png", 6, 6));
+    } else if (selectionAction() == SELECTION_SUBTRACT) {
+        useCursor(KisCursor::load("tool_polygonal_selection_cursor_sub.png", 6, 6));
+    } else {
+        KisToolSelectBase<KisDelegatedSelectPathWrapper>::resetCursorStyle();
     }
 }
 

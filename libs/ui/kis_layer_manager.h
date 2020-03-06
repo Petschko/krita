@@ -31,6 +31,7 @@ class KisViewManager;
 class KisNodeCommandsAdapter;
 class KisAction;
 class KisActionManager;
+class KisProcessingApplicator;
 
 /**
  * KisLayerManager takes care of the gui around working with layers:
@@ -49,8 +50,6 @@ public:
     void setView(QPointer<KisView>view);
 
 Q_SIGNALS:
-
-    void sigLayerActivated(KisLayerSP layer);
 
 private:
 
@@ -93,41 +92,43 @@ private Q_SLOTS:
 
     void convertLayerToFileLayer(KisNodeSP source);
 
-    KisLayerSP addLayer(KisNodeSP activeNode);
-    void addGroupLayer(KisNodeSP activeNode);
+    KisLayerSP addPaintLayer(KisNodeSP activeNode);
+    KisNodeSP addGroupLayer(KisNodeSP activeNode);
 
-    void addCloneLayer(KisNodeSP activeNode);
+    KisNodeSP addCloneLayer(KisNodeList nodes);
 
-    void addShapeLayer(KisNodeSP activeNode);
+    KisNodeSP addShapeLayer(KisNodeSP activeNode);
 
-    void addAdjustmentLayer(KisNodeSP activeNode);
-    KisAdjustmentLayerSP addAdjustmentLayer(KisNodeSP activeNode, const QString & name, KisFilterConfigurationSP  filter, KisSelectionSP selection);
+    KisNodeSP addAdjustmentLayer(KisNodeSP activeNode);
+    KisAdjustmentLayerSP addAdjustmentLayer(KisNodeSP activeNode, const QString & name, KisFilterConfigurationSP  filter, KisSelectionSP selection, KisProcessingApplicator *applicator);
 
-    void addGeneratorLayer(KisNodeSP activeNode);
+    KisNodeSP addGeneratorLayer(KisNodeSP activeNode);
 
-    void addFileLayer(KisNodeSP activeNode);
+    KisNodeSP addFileLayer(KisNodeSP activeNode);
 
     void layerStyle();
 
+    void changeCloneSource();
+
 private:
     void adjustLayerPosition(KisNodeSP node, KisNodeSP activeNode, KisNodeSP &parent, KisNodeSP &above);
-    void addLayerCommon(KisNodeSP activeNode, KisLayerSP layer, bool updateImage = true);
+    void addLayerCommon(KisNodeSP activeNode, KisNodeSP layer, bool updateImage = true, KisProcessingApplicator *applicator = 0);
 
 private:
 
     KisViewManager * m_view;
-    QPointer<KisView>m_imageView;
+    QPointer<KisView>m_imageView {0};
 
-    KisAction *m_imageFlatten;
-    KisAction *m_imageMergeLayer;
-    KisAction *m_groupLayersSave;
-    KisAction *m_convertGroupAnimated;
-    KisAction *m_imageResizeToLayer;
-    KisAction *m_flattenLayer;
-    KisAction *m_rasterizeLayer;
+    KisAction *m_imageFlatten {0};
+    KisAction *m_imageMergeLayer {0};
+    KisAction *m_groupLayersSave {0};
+    KisAction *m_convertGroupAnimated {0};
+    KisAction *m_imageResizeToLayer {0};
+    KisAction *m_flattenLayer {0};
+    KisAction *m_rasterizeLayer {0};
     KisNodeCommandsAdapter* m_commandsAdapter;
 
-    KisAction *m_layerStyle;
+    KisAction *m_layerStyle {0};
 };
 
 #endif

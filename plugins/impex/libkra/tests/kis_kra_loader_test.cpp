@@ -26,7 +26,6 @@
 #include <KoColorSpace.h>
 #include <KoColor.h>
 
-#include "KisDocument.h"
 #include "kis_image.h"
 #include "testutil.h"
 #include "KisPart.h"
@@ -38,7 +37,12 @@
 #include "kis_keyframe_channel.h"
 #include "kis_time_range.h"
 
+#include <filestest.h>
+
 #include  <sdk/tests/kistest.h>
+
+
+const QString KraMimetype = "application/x-krita";
 
 void KisKraLoaderTest::initTestCase()
 {
@@ -51,7 +55,7 @@ void KisKraLoaderTest::testLoading()
     QScopedPointer<KisDocument> doc(KisPart::instance()->createDocument());
     doc->loadNativeFormat(QString(FILES_DATA_DIR) + QDir::separator() + "load_test.kra");
     KisImageSP image = doc->image();
-    image->lock();
+    image->waitForDone();
     QCOMPARE(image->nlayers(), 12);
     QCOMPARE(doc->documentInfo()->aboutInfo("title"), QString("test image for loading"));
     QCOMPARE(image->height(), 753);
@@ -169,6 +173,20 @@ void KisKraLoaderTest::testLoadAnimated()
     QCOMPARE(dev->y(), -10);
     QCOMPARE(dev->defaultPixel(), red);
 }
+
+
+
+void KisKraLoaderTest::testImportFromWriteonly()
+{
+    TestUtil::testImportFromWriteonly(QString(FILES_DATA_DIR), KraMimetype);
+}
+
+
+void KisKraLoaderTest::testImportIncorrectFormat()
+{
+    TestUtil::testImportIncorrectFormat(QString(FILES_DATA_DIR), KraMimetype);
+}
+
 
 
 KISTEST_MAIN(KisKraLoaderTest)

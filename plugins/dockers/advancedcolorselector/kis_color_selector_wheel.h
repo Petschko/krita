@@ -22,6 +22,7 @@ typedef unsigned int QRgb;
 
 #include <QColor>
 #include <QImage>
+#include <QSize>
 
 #include "KoColor.h"
 #include "kis_color_selector_component.h"
@@ -46,6 +47,7 @@ private:
     KoColor colorAt(int x, int y, bool forceValid = false);
 
 private:
+    bool allowsColorSelectionAtPoint(const QPoint &pt) const override;
     QPointF m_lastClickPos;
     QImage m_pixelCache;
     QPoint m_pixelCacheOffset;
@@ -53,6 +55,11 @@ private:
     qreal G;
     qreal B;
     qreal Gamma;
+
+    QSize m_renderAreaSize;
+    qreal m_renderAreaOffsetX;
+    qreal m_renderAreaOffsetY;
+    QTransform m_toRenderArea;
 };
 
 #endif // KIS_COLOR_SELECTOR_WHEEL_H

@@ -26,6 +26,7 @@
 #include <QPaintDevice>
 #include <QTransform>
 #include <QScopedPointer>
+#include <QSharedData>
 
 #include <KoClipMask.h>
 
@@ -33,22 +34,13 @@ class KoBorder;
 class KoShapeManager;
 
 
-class KoShapePrivate
+class KoShape::SharedData : public QSharedData
 {
 public:
-    explicit KoShapePrivate(KoShape *shape);
-    virtual ~KoShapePrivate();
+    explicit SharedData();
+    virtual ~SharedData();
 
-    explicit KoShapePrivate(const KoShapePrivate &rhs, KoShape *q);
-
-    /**
-     * Notify the shape that a change was done. To be used by inheriting shapes.
-     * @param type the change type
-     */
-    void shapeChanged(KoShape::ChangeType type);
-
-    void addShapeManager(KoShapeManager *manager);
-    void removeShapeManager(KoShapeManager *manager);
+    explicit SharedData(const SharedData &rhs);
 
     /**
      * Fills the style stack and returns the value of the given style property (e.g fill, stroke).
@@ -61,10 +53,9 @@ public:
     // Loads the border style.
     KoBorder *loadOdfBorder(KoShapeLoadingContext &context) const;
 
+
 public:
     // Members
-
-    KoShape *q_ptr;             // Points the shape that owns this class.
 
     mutable QSizeF size; // size in pt
     QString shapeId;
@@ -74,18 +65,14 @@ public:
 
     KoConnectionPoints connectors; ///< glue point id to data mapping
 
-    KoShapeContainer *parent;
-    QSet<KoShapeManager *> shapeManagers;
-    QSet<KoShape *> toolDelegates;
     QScopedPointer<KoShapeUserData> userData;
     QSharedPointer<KoShapeStrokeModel> stroke; ///< points to a stroke, or 0 if there is no stroke
     QSharedPointer<KoShapeBackground> fill; ///< Stands for the background color / fill etc.
     bool inheritBackground = false;
     bool inheritStroke = false;
-    QList<KoShape*> dependees; ///< list of shape dependent on this shape
-    QList<KoShape::ShapeChangeListener*> listeners;
     KoShapeShadow * shadow; ///< the current shape shadow
     KoBorder *border; ///< the current shape border
+    // XXX: change this to instance instead of pointer
     QScopedPointer<KoClipPath> clipPath; ///< the current clip path
     QScopedPointer<KoClipMask> clipMask; ///< the current clip mask
     QMap<QString, QString> additionalAttributes;
@@ -101,7 +88,6 @@ public:
     int geometryProtected : 1;
     int keepAspect : 1;
     int selectable : 1;
-    int detectCollision : 1;
     int protectContent : 1;
 
     KoShape::TextRunAroundSide textRunAroundSide;
@@ -112,7 +98,6 @@ public:
     qreal textRunAroundThreshold;
     KoShape::TextRunAroundContour textRunAroundContour;
 
-
 public:
     /// Connection point converters
 
@@ -121,8 +106,16 @@ public:
 
     /// Convert connection point position to shape coordinates, taking alignment into account
     void convertToShapeCoordinates(KoConnectionPoint &point, const QSizeF &shapeSize) const;
+};
 
-    Q_DECLARE_PUBLIC(KoShape)
+class KoShape::Private
+{
+public:
+    KoShapeContainer *parent;
+    QSet<KoShapeManager *> shapeManagers;
+    QSet<KoShape *> toolDelegates;
+    QList<KoShape*> dependees; ///< list of shape dependent on this shape
+    QList<KoShape::ShapeChangeListener*> listeners;
 };
 
 #endif

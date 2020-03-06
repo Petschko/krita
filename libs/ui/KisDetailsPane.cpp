@@ -40,7 +40,6 @@ KisDetailsPane::KisDetailsPane(QWidget* parent, const QString& header)
 
     setupUi(this);
 
-    m_previewLabel->installEventFilter(this);
     m_documentList->installEventFilter(this);
     m_documentList->setIconSize(QSize(IconExtent, IconExtent));
     m_documentList->setModel(&d->m_model);
@@ -48,10 +47,10 @@ KisDetailsPane::KisDetailsPane(QWidget* parent, const QString& header)
 
     changePalette();
 
-    connect(m_documentList->selectionModel(), SIGNAL(currentChanged(const QModelIndex&, const QModelIndex&)),
-            this, SLOT(selectionChanged(const QModelIndex&)));
-    connect(m_documentList, SIGNAL(doubleClicked(const QModelIndex&)),
-            this, SLOT(openFile(const QModelIndex&)));
+    connect(m_documentList->selectionModel(), SIGNAL(currentChanged(QModelIndex,QModelIndex)),
+            this, SLOT(selectionChanged(QModelIndex)));
+    connect(m_documentList, SIGNAL(doubleClicked(QModelIndex)),
+            this, SLOT(openFile(QModelIndex)));
     connect(m_openButton, SIGNAL(clicked()), this, SLOT(openFile()));
 }
 
@@ -62,12 +61,6 @@ KisDetailsPane::~KisDetailsPane()
 
 bool KisDetailsPane::eventFilter(QObject* watched, QEvent* e)
 {
-    if (watched == m_previewLabel) {
-        if (e->type() == QEvent::MouseButtonDblClick) {
-            openFile();
-        }
-    }
-
     if (watched == m_documentList) {
         if ((e->type() == QEvent::Resize) && isVisible()) {
             emit splitterResized(this, m_splitter->sizes());

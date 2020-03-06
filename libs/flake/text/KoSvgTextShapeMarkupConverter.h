@@ -54,8 +54,8 @@ public:
 
     /**
      * @brief upload the svg representation of text into the shape
-     * @param svgText <text> part of SVG
-     * @param stylesText <defs> part of SVG (used only for gradients and patterns)
+     * @param svgText \<text\> part of SVG
+     * @param stylesText \<defs\> part of SVG (used only for gradients and patterns)
      * @param boundsInPixels bounds of the entire image in pixel. Used for parsing percentage units.
      * @param pixelsPerInch resolution of the image where we load the shape to
      *
@@ -66,16 +66,16 @@ public:
     /**
      * @brief convertToHtml convert the text in the text shape to html
      * @param htmlText will be filled with correct html representing the text in the shape
-     * @return true om success
+     * @return @c true on success
      */
     bool convertToHtml(QString *htmlText);
 
     /**
-     * @brief convertFromHtml converted Qt rich text html (and no other: http://doc.qt.io/qt-5/richtext-html-subset.html) to SVG
+     * @brief convertFromHtml converted Qt rich text html (and no other: https://doc.qt.io/qt-5/richtext-html-subset.html) to SVG
      * @param htmlText the input html
      * @param svgText the converted svg text element
      * @param styles
-     * @return true if the conversion was successful
+     * @return @c true if the conversion was successful
      */
     bool convertFromHtml(const QString &htmlText, QString *svgText, QString *styles);
 
@@ -83,15 +83,15 @@ public:
      * @brief convertDocumentToSvg
      * @param doc the QTextDocument to convert.
      * @param svgText the converted svg text element
-     * @return true if the conversion was successful
+     * @return @c true if the conversion was successful
      */
     bool convertDocumentToSvg(const QTextDocument *doc, QString *svgText);
 
     /**
      * @brief convertSvgToDocument
-     * @param svgText the <text> element and it's children as a string.
+     * @param svgText the \<text\> element and it's children as a string.
      * @param doc the QTextDocument that the conversion is written to.
-     * @return true if the conversion was successful
+     * @return @c true if the conversion was successful
      */
     bool convertSvgToDocument(const QString &svgText, QTextDocument *doc);
 

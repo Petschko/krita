@@ -48,6 +48,8 @@ KisToolColorPicker::KisToolColorPicker(KoCanvasBase *canvas)
     m_isActivated = false;
     m_optionsWidget = 0;
     m_pickedColor = KoColor();
+    KoResourceServer<KoColorSet> *srv = KoResourceServerProvider::instance()->paletteServer();
+    srv->addObserver(this);
 }
 
 KisToolColorPicker::~KisToolColorPicker()
@@ -55,6 +57,8 @@ KisToolColorPicker::~KisToolColorPicker()
     if (m_isActivated) {
         m_config->save(m_toolActivationSource == KisTool::DefaultActivation);
     }
+    KoResourceServer<KoColorSet> *srv = KoResourceServerProvider::instance()->paletteServer();
+    srv->removeObserver(this);
 }
 
 void KisToolColorPicker::paint(QPainter &gc, const KoViewConverter &converter)
@@ -129,20 +133,20 @@ bool KisToolColorPicker::pickColor(const QPointF &pos)
 
         KoColor previousColor = canvas()->resourceManager()->foregroundColor();
 
-        KisToolUtils::pickColor(m_pickedColor, dev, pos.toPoint(), &previousColor, m_config->radius, m_config->blend); /*!*/
+        KisToolUtils::pickColor(m_pickedColor, dev, pos.toPoint(), &previousColor, m_config->radius, m_config->blend);
     }
 
     if (m_config->updateColor &&
         m_pickedColor.opacityU8() != OPACITY_TRANSPARENT_U8) {
 
         KoColor publicColor = m_pickedColor;
-        publicColor.setOpacity(OPACITY_OPAQUE_U8);
+        publicColor.setOpacity(OPACITY_OPAQUE_U8); // Alpha is unwanted for FG and BG colors.
 
         if (m_config->toForegroundColor) {
-            canvas()->resourceManager()->setResource(KoCanvasResourceManager::ForegroundColor, publicColor);
+            canvas()->resourceManager()->setResource(KoCanvasResourceProvider::ForegroundColor, publicColor);
         }
         else {
-            canvas()->resourceManager()->setResource(KoCanvasResourceManager::BackgroundColor, publicColor);
+            canvas()->resourceManager()->setResource(KoCanvasResourceProvider::BackgroundColor, publicColor);
         }
     }
 
@@ -188,23 +192,26 @@ void KisToolColorPicker::continuePrimaryAction(KoPointerEvent *event)
     displayPickedColor();
 }
 
+#include "kis_display_color_converter.h"
+
 void KisToolColorPicker::endPrimaryAction(KoPointerEvent *event)
 {
     Q_UNUSED(event);
     CHECK_MODE_SANITY_OR_RETURN(KisTool::PAINT_MODE);
 
-    if (m_config->addPalette) {
-        KoColorSetEntry ent;
-        ent.setColor(m_pickedColor);
+    if (m_config->addColorToCurrentPalette) {
+        KisSwatch swatch;
+        swatch.setColor(m_pickedColor);
         // We don't ask for a name, too intrusive here
 
-        KoColorSet *palette = m_palettes.at(m_optionsWidget->cmbPalette->currentIndex());
-        palette->add(ent);
+        KoColorSet *palette = m_palettes.at(m_optionsWidget->cmbPalette->currentIndex());        
+        palette->add(swatch);
 
         if (!palette->save()) {
             QMessageBox::critical(0, i18nc("@title:window", "Krita"), i18n("Cannot write to palette file %1. Maybe it is read-only.", palette->filename()));
-        }
+        } 
     }
+
 }
 
 struct PickedChannel {
@@ -244,6 +251,17 @@ void KisToolColorPicker::displayPickedColor()
             item->setText(0, pc.name);
             item->setText(1, pc.valueText);
         }
+
+        KisCanvas2 *kritaCanvas = dynamic_cast<KisCanvas2*>(canvas());
+        KoColor newColor = kritaCanvas->displayColorConverter()->applyDisplayFiltering(m_pickedColor, Float32BitsColorDepthID);
+        QVector<float> values(4);
+        newColor.colorSpace()->normalisedChannelsValue(newColor.data(), values);
+
+        for (int i = 0; i < values.size(); i++) {
+            QTreeWidgetItem *item = new QTreeWidgetItem(m_optionsWidget->listViewChannels);
+            item->setText(0, QString("DisplayCh%1").arg(i));
+            item->setText(1, QString::number(values[i]));
+        }
     }
 }
 
@@ -261,7 +279,7 @@ QWidget* KisToolColorPicker::createOptionWidget()
 
     // Initialize blend KisSliderSpinBox
     m_optionsWidget->blend->setRange(0,100);
-    m_optionsWidget->blend->setSuffix("%");
+    m_optionsWidget->blend->setSuffix(i18n("%"));
 
     updateOptionWidget();
 
@@ -301,7 +319,7 @@ void KisToolColorPicker::updateOptionWidget()
     m_optionsWidget->cbNormaliseValues->setChecked(m_config->normaliseValues);
     m_optionsWidget->cbUpdateCurrentColor->setChecked(m_config->updateColor);
     m_optionsWidget->cmbSources->setCurrentIndex(SAMPLE_MERGED + !m_config->sampleMerged);
-    m_optionsWidget->cbPalette->setChecked(m_config->addPalette);
+    m_optionsWidget->cbPalette->setChecked(m_config->addColorToCurrentPalette);
     m_optionsWidget->radius->setValue(m_config->radius);
     m_optionsWidget->blend->setValue(m_config->blend);
 }
@@ -330,7 +348,7 @@ void KisToolColorPicker::slotSetNormaliseValues(bool state)
 
 void KisToolColorPicker::slotSetAddPalette(bool state)
 {
-    m_config->addPalette = state;
+    m_config->addColorToCurrentPalette = state;
 }
 
 void KisToolColorPicker::slotChangeRadius(int value)
@@ -348,11 +366,56 @@ void KisToolColorPicker::slotSetColorSource(int value)
     m_config->sampleMerged = value == SAMPLE_MERGED;
 }
 
-void KisToolColorPicker::slotAddPalette(KoResource *resource)
+void KisToolColorPicker::unsetResourceServer()
 {
-    KoColorSet *palette = dynamic_cast<KoColorSet*>(resource);
-    if (palette) {
-        m_optionsWidget->cmbPalette->addSqueezedItem(palette->name());
-        m_palettes.append(palette);
+    KoResourceServer<KoColorSet> *srv = KoResourceServerProvider::instance()->paletteServer();
+    srv->removeObserver(this);
+}
+
+void KisToolColorPicker::resourceAdded(KoColorSet* resource){
+    if(!resource || !m_optionsWidget) return;
+    if(m_palettes.contains(resource)) return;
+
+    if(m_config->addColorToCurrentPalette){
+        updateCmbPalette();
     }
 }
+
+void KisToolColorPicker::removingResource(KoColorSet* resource){
+    if(!resource || !m_optionsWidget) return; 
+    if(!m_palettes.contains(resource)) return;
+    
+    if(m_config->addColorToCurrentPalette){
+            updateCmbPalette();
+    }
+}
+
+void KisToolColorPicker::updateCmbPalette(){
+    m_optionsWidget->cmbPalette->clear();
+    m_palettes.clear();
+
+    KoResourceServer<KoColorSet> *srv = KoResourceServerProvider::instance()->paletteServer();
+    
+    if (!srv) {
+        return ;
+    }
+
+    QList<KoColorSet*> palettes = srv->resources();
+
+    Q_FOREACH (KoColorSet *palette, palettes) {
+        if (palette) {
+            m_optionsWidget->cmbPalette->addSqueezedItem(palette->name());
+            m_palettes.append(palette);
+        }
+    }
+
+}
+
+void KisToolColorPicker::resourceChanged(PointerType /*resource*/)
+{}
+
+void KisToolColorPicker::syncTaggedResourceView() {}
+
+void KisToolColorPicker::syncTagAddition(const QString& /*tag*/) {}
+
+void KisToolColorPicker::syncTagRemoval(const QString& /*tag*/) {}

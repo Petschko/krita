@@ -42,6 +42,11 @@ QRect KisUpdateInfo::dirtyViewportRect()
     return QRect();
 }
 
+bool KisUpdateInfo::canBeCompressed() const
+{
+    return true;
+}
+
 QRect KisPPUpdateInfo::dirtyViewportRect() {
     return viewportRect.toAlignedRect();
 }
@@ -95,4 +100,32 @@ bool KisOpenGLUpdateInfo::tryMergeWith(const KisOpenGLUpdateInfo &rhs)
     tileList.append(rhs.tileList);
 
     return true;
+}
+
+KisMarkerUpdateInfo::KisMarkerUpdateInfo(KisMarkerUpdateInfo::Type type, const QRect &dirtyImageRect)
+    : m_type(type),
+      m_dirtyImageRect(dirtyImageRect)
+{
+}
+
+KisMarkerUpdateInfo::Type KisMarkerUpdateInfo::type() const
+{
+    return m_type;
+}
+
+QRect KisMarkerUpdateInfo::dirtyImageRect() const
+{
+    return m_dirtyImageRect;
+}
+
+int KisMarkerUpdateInfo::levelOfDetail() const
+{
+    // return invalid level of detail to avoid merging the update info
+    // with other updates
+    return -1 - (int)m_type;
+}
+
+bool KisMarkerUpdateInfo::canBeCompressed() const
+{
+    return false;
 }

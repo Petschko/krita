@@ -41,6 +41,8 @@ void KisNodeModelTest::init()
     m_nodeModel = new KisNodeModel(0);
 
     initBase();
+
+    m_doc->setCurrentImage(m_image);
 }
 
 void KisNodeModelTest::cleanup()
@@ -107,7 +109,7 @@ void KisNodeModelTest::testSubstituteRootNode()
     m_nodeModel->setDummiesFacade(m_shapeController, m_image, 0, 0, 0);
     new ModelTest(m_nodeModel, this);
 
-    m_image->flatten();
+    m_image->flatten(0);
 }
 
 KISTEST_MAIN(KisNodeModelTest)

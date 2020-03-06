@@ -29,12 +29,15 @@
 #include <QDropEvent>
 #include <QMenu>
 #include <QScrollBar>
+#include <QScroller>
 #include <QDrag>
 #include <QInputDialog>
 #include <QClipboard>
 #include <QMimeData>
+#include "config-qtmultimedia.h"
 
 #include "KSharedConfig"
+#include "KisKineticScroller.h"
 
 #include "kis_zoom_button.h"
 #include "kis_icon_utils.h"
@@ -44,6 +47,7 @@
 #include "kis_signal_compressor.h"
 #include "kis_time_range.h"
 #include "kis_color_label_selector_widget.h"
+#include "kis_keyframe_channel.h"
 #include "kis_slider_spin_box.h"
 #include <KisImportExportManager.h>
 #include <kis_signals_blocker.h>
@@ -192,7 +196,7 @@ TimelineFramesView::TimelineFramesView(QWidget *parent)
     connect(m_d->existingLayersMenu, SIGNAL(aboutToShow()), SLOT(slotUpdateLayersMenu()));
     connect(m_d->existingLayersMenu, SIGNAL(triggered(QAction*)), SLOT(slotAddExistingLayer(QAction*)));
 
-    connect(m_d->layersHeader, SIGNAL(sigRequestContextMenu(const QPoint&)), SLOT(slotLayerContextMenuRequested(const QPoint&)));
+    connect(m_d->layersHeader, SIGNAL(sigRequestContextMenu(QPoint)), SLOT(slotLayerContextMenuRequested(QPoint)));
 
     m_d->addLayersButton->setMenu(m_d->layerEditingMenu);
 
@@ -201,7 +205,7 @@ TimelineFramesView::TimelineFramesView(QWidget *parent)
     m_d->audioOptionsButton = new QToolButton(this);
     m_d->audioOptionsButton->setAutoRaise(true);
     m_d->audioOptionsButton->setIcon(KisIconUtils::loadIcon("audio-none"));
-    m_d->audioOptionsButton->setIconSize(QSize(20, 20)); // very small on windows if not explicity set
+    m_d->audioOptionsButton->setIconSize(QSize(20, 20)); // very small on windows if not explicitly set
     m_d->audioOptionsButton->setPopupMode(QToolButton::InstantPopup);
 
     m_d->audioOptionsMenu = new QMenu(this);
@@ -225,7 +229,7 @@ TimelineFramesView::TimelineFramesView(QWidget *parent)
 
     m_d->volumeSlider = new KisSliderSpinBox(this);
     m_d->volumeSlider->setRange(0, 100);
-    m_d->volumeSlider->setSuffix("%");
+    m_d->volumeSlider->setSuffix(i18n("%"));
     m_d->volumeSlider->setPrefix(i18nc("@item:inmenu, slider", "Volume:"));
     m_d->volumeSlider->setSingleStep(1);
     m_d->volumeSlider->setPageStep(10);
@@ -260,7 +264,7 @@ TimelineFramesView::TimelineFramesView(QWidget *parent)
     m_d->zoomDragButton = new KisZoomButton(this);
     m_d->zoomDragButton->setAutoRaise(true);
     m_d->zoomDragButton->setIcon(KisIconUtils::loadIcon("zoom-horizontal"));
-    m_d->zoomDragButton->setIconSize(QSize(20, 20)); // this icon is very small on windows if no explicity set
+    m_d->zoomDragButton->setIconSize(QSize(20, 20)); // this icon is very small on windows if no explicitly set
 
     m_d->zoomDragButton->setToolTip(i18nc("@info:tooltip", "Zoom Timeline. Hold down and drag left or right."));
     m_d->zoomDragButton->setPopupMode(QToolButton::InstantPopup);
@@ -269,6 +273,14 @@ TimelineFramesView::TimelineFramesView(QWidget *parent)
 
     setFramesPerSecond(12);
     setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+
+    {
+        QScroller *scroller = KisKineticScroller::createPreconfiguredScroller(this);
+        if( scroller ) {
+            connect(scroller, SIGNAL(stateChanged(QScroller::State)),
+                    this, SLOT(slotScrollerStateChanged(QScroller::State)));
+        }
+    }
 
     connect(&m_d->selectionChangedCompressor, SIGNAL(timeout()),
             SLOT(slotSelectionChanged()));
@@ -394,13 +406,13 @@ void TimelineFramesView::setModel(QAbstractItemModel *model)
 
     QTableView::setModel(model);
 
-    connect(m_d->model, SIGNAL(headerDataChanged(Qt::Orientation, int, int)),
-            this, SLOT(slotHeaderDataChanged(Qt::Orientation, int, int)));
+    connect(m_d->model, SIGNAL(headerDataChanged(Qt::Orientation,int,int)),
+            this, SLOT(slotHeaderDataChanged(Qt::Orientation,int,int)));
 
     connect(m_d->model, SIGNAL(dataChanged(QModelIndex,QModelIndex)),
             this, SLOT(slotDataChanged(QModelIndex,QModelIndex)));
 
-    connect(m_d->model, SIGNAL(rowsRemoved(const QModelIndex&, int, int)),
+    connect(m_d->model, SIGNAL(rowsRemoved(QModelIndex,int,int)),
             this, SLOT(slotReselectCurrentIndex()));
 
     connect(m_d->model, SIGNAL(sigInfiniteTimelineUpdateNeeded()),
@@ -409,7 +421,7 @@ void TimelineFramesView::setModel(QAbstractItemModel *model)
     connect(m_d->model, SIGNAL(sigAudioChannelChanged()),
             this, SLOT(slotUpdateAudioActions()));
 
-    connect(selectionModel(), SIGNAL(selectionChanged(const QItemSelection &, const QItemSelection &)),
+    connect(selectionModel(), SIGNAL(selectionChanged(QItemSelection,QItemSelection)),
             &m_d->selectionChangedCompressor, SLOT(start()));
 
     connect(m_d->model, SIGNAL(sigEnsureRowVisible(int)), SLOT(slotEnsureRowVisible(int)));
@@ -552,6 +564,10 @@ void TimelineFramesView::slotUpdateInfiniteFramesCount()
     m_d->model->setLastVisibleFrame(calculatedIndex);
 }
 
+void TimelineFramesView::slotScrollerStateChanged( QScroller::State state ) {
+    KisKineticScroller::updateCursor(this, state);
+}
+
 void TimelineFramesView::currentChanged(const QModelIndex &current, const QModelIndex &previous)
 {
     QTableView::currentChanged(current, previous);
@@ -676,6 +692,7 @@ void TimelineFramesView::slotDataChanged(const QModelIndex &topLeft, const QMode
         int row= index.isValid() ? index.row() : 0;
         selectionModel()->setCurrentIndex(m_d->model->index(row, selectedColumn), QItemSelectionModel::ClearAndSelect);
     }
+
 }
 
 void TimelineFramesView::slotHeaderDataChanged(Qt::Orientation orientation, int first, int last)
@@ -896,6 +913,9 @@ void TimelineFramesView::dropEvent(QDropEvent *event)
     m_d->dragInProgress = false;
     m_d->model->setScrubState(false);
 
+    if (event->keyboardModifiers() & Qt::ControlModifier) {
+        event->setDropAction(Qt::CopyAction);
+    }
     QAbstractItemView::dropEvent(event);
     m_d->dragWasSuccessful = event->isAccepted();
 }
@@ -935,6 +955,19 @@ void TimelineFramesView::createFrameEditingMenuActions(QMenu *menu, bool addFram
     KisActionManager::safePopulateMenu(menu, "paste_frames_from_clipboard", m_d->actionMan);
 
     menu->addSeparator();
+
+    {   // Tween submenu.
+        QMenu *frames = menu->addMenu(i18nc("@item:inmenu", "Tweening"));
+
+        KisActionManager::safePopulateMenu(frames, "insert_opacity_keyframe", m_d->actionMan);
+        KisActionManager::safePopulateMenu(frames, "remove_opacity_keyframe", m_d->actionMan);
+
+        // only allow to add an opacity keyframe if one doesn't exist
+        bool opacityKeyframeExists = model()->data(currentIndex(), TimelineFramesModel::SpecialKeyframeExists).toBool();
+        m_d->actionMan->actionByName("insert_opacity_keyframe")->setEnabled(!opacityKeyframeExists);
+        m_d->actionMan->actionByName("remove_opacity_keyframe")->setEnabled(opacityKeyframeExists);
+    }
+
 
     {   //Frames submenu.
         QMenu *frames = menu->addMenu(i18nc("@item:inmenu", "Keyframes"));
@@ -997,6 +1030,7 @@ void TimelineFramesView::mousePressEvent(QMouseEvent *event)
             model()->setData(index, true, TimelineFramesModel::ActiveLayerRole);
             model()->setData(index, true, TimelineFramesModel::ActiveFrameRole);
             setCurrentIndex(index);
+
 
             if (model()->data(index, TimelineFramesModel::FrameExistsRole).toBool() ||
                     model()->data(index, TimelineFramesModel::SpecialKeyframeExists).toBool()) {
@@ -1197,10 +1231,12 @@ void TimelineFramesView::slotUpdateFrameActions()
     enableAction("copy_frames_to_clipboard", true);
     enableAction("cut_frames_to_clipboard", hasEditableFrames);
 
+    enableAction("insert_opacity_keyframe", hasEditableFrames);
+    enableAction("remove_opacity_keyframe", hasEditableFrames);
+
     QClipboard *cp = QApplication::clipboard();
     const QMimeData *data = cp->mimeData();
 
-    enableAction("paste_frames_from_clipboard", data && data->hasFormat("application/x-krita-frame"));
 
     //TODO: update column actions!
 }
@@ -1401,7 +1437,32 @@ void TimelineFramesView::insertOrRemoveHoldFrames(int count, bool entireColumn)
     }
 
     if (!indexes.isEmpty()) {
+
+        // add extra columns to the end of the timeline if we are adding hold frames
+        // they will be truncated if we don't do this
+        if (count > 0) {
+            // Scan all the layers and find out what layer has the most keyframes
+            // only keep a reference of layer that has the most keyframes
+            int keyframesInLayerNode = 0;
+            Q_FOREACH (const QModelIndex &index, indexes) {
+                KisNodeSP layerNode = m_d->model->nodeAt(index);
+
+                KisKeyframeChannel *channel = layerNode->getKeyframeChannel(KisKeyframeChannel::Content.id());
+                if (!channel) continue;
+
+                if (keyframesInLayerNode < channel->allKeyframeIds().count()) {
+                   keyframesInLayerNode = channel->allKeyframeIds().count();
+                }
+            }
+            m_d->model->setLastVisibleFrame(m_d->model->columnCount() + count*keyframesInLayerNode);
+        }
+
+
         m_d->model->insertHoldFrames(indexes, count);
+
+        // bulk adding frames can add too many
+        // trim timeline to clean up extra frames that might have been added
+        slotUpdateInfiniteFramesCount();
     }
 }
 
@@ -1411,17 +1472,20 @@ void TimelineFramesView::insertOrRemoveMultipleHoldFrames(bool insertion, bool e
     const int count = QInputDialog::getInt(this,
                                            i18nc("@title:window", "Insert or Remove Hold Frames"),
                                            i18nc("@label:spinbox", "Enter number of frames"),
-                                           defaultNumberOfFramesToAdd(),
+                                           insertion ?
+                                               m_d->insertKeyframeDialog->defaultTimingOfAddedFrames() :
+                                               m_d->insertKeyframeDialog->defaultNumberOfHoldFramesToRemove(),
                                            1, 10000, 1, &ok);
 
     if (ok) {
         if (insertion) {
-            setDefaultNumberOfFramesToAdd(count);
+            m_d->insertKeyframeDialog->setDefaultTimingOfAddedFrames(count);
             insertOrRemoveHoldFrames(count, entireColumn);
         } else {
-            setDefaultNumberOfFramesToRemove(count);
+            m_d->insertKeyframeDialog->setDefaultNumberOfHoldFramesToRemove(count);
             insertOrRemoveHoldFrames(-count, entireColumn);
         }
+
     }
 }
 
@@ -1480,54 +1544,6 @@ void TimelineFramesView::slotPasteFrames(bool entireColumn)
             cb->clear();
         }
     }
-}
-
-int TimelineFramesView::defaultNumberOfFramesToAdd() const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    return cfg.readEntry("defaultNumberOfFramesToAdd", 1);
-}
-
-void TimelineFramesView::setDefaultNumberOfFramesToAdd(int value) const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    cfg.writeEntry("defaultNumberOfFramesToAdd", value);
-}
-
-int TimelineFramesView::defaultNumberOfColumnsToAdd() const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    return cfg.readEntry("defaultNumberOfColumnsToAdd", 1);
-}
-
-void TimelineFramesView::setDefaultNumberOfColumnsToAdd(int value) const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    cfg.writeEntry("defaultNumberOfColumnsToAdd", value);
-}
-
-int TimelineFramesView::defaultNumberOfFramesToRemove() const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    return cfg.readEntry("defaultNumberOfFramesToRemove", 1);
-}
-
-void TimelineFramesView::setDefaultNumberOfFramesToRemove(int value) const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    cfg.writeEntry("defaultNumberOfFramesToRemove", value);
-}
-
-int TimelineFramesView::defaultNumberOfColumnsToRemove() const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    return cfg.readEntry("defaultNumberOfColumnsToRemove", 1);
-}
-
-void TimelineFramesView::setDefaultNumberOfColumnsToRemove(int value) const
-{
-    KConfigGroup cfg =  KSharedConfig::openConfig()->group("FrameActionsDefaultValues");
-    cfg.writeEntry("defaultNumberOfColumnsToRemove", value);
 }
 
 bool TimelineFramesView::viewportEvent(QEvent *event)

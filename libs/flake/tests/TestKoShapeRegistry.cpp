@@ -189,12 +189,13 @@ void TestKoShapeRegistry::testFramedSvgShapes()
     QScopedPointer<KoStore> store(KoStore::createStore(resourcesBlob, KoStore::Read, "krita", KoStore::Zip));
     QScopedPointer<KoDocumentResourceManager> resourceManager(new KoDocumentResourceManager());
 
+    resourceManager->setResource(KoDocumentResourceManager::DocumentRectInPixels, QRect(0,0,1000,1000));
 
     QScopedPointer<MockShapeController> document(new MockShapeController());
     QScopedPointer<MockCanvas> canvas(new MockCanvas(document.data()));
 
     QScopedPointer<KoShapeController> shapeController(new KoShapeController(canvas.data(), document.data()));
-    resourceManager->setShapeController(shapeController.data());
+    resourceManager->setGlobalShapeController(shapeController.data());
 
 
     KoOdfLoadingContext odfContext(stylesReader, store.data());
@@ -207,7 +208,7 @@ void TestKoShapeRegistry::testFramedSvgShapes()
     KoShape *shape = registry->createShapeFromOdf(frameElement, shapeContext);
 
     QVERIFY(shape);
-    QCOMPARE(shape->absoluteOutlineRect(0), QRectF(83, 41, 226,141));
+    QCOMPARE(shape->absoluteOutlineRect(), QRectF(83, 41, 226,141));
 }
 
 KISTEST_MAIN(TestKoShapeRegistry)

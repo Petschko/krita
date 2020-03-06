@@ -53,7 +53,7 @@ public:
     const KoColorSpace* colorSpace() const override;
 
     // assign color profile without conversion of pixel data
-    void setProfile(const KoColorProfile *profile);
+    void setProfile(const KoColorProfile *profile, KUndo2Command *parentCommand);
 
     KUndo2Command* setColorSpace(const KoColorSpace * dstColorSpace,
                                  KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
@@ -167,9 +167,9 @@ private:
     template <class DeviceMetricPolicy>
     QRect calculateMaskBounds(DeviceMetricPolicy policy) const;
 
-    friend class SetKeyStrokesColorSpaceCommand;
-    friend class KeyStrokeAddRemoveCommand;
-    friend class SetKeyStrokeColorsCommand;
+    friend struct SetKeyStrokesColorSpaceCommand;
+    friend struct KeyStrokeAddRemoveCommand;
+    friend struct SetKeyStrokeColorsCommand;
 
 private:
     struct Private;

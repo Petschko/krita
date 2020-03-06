@@ -60,7 +60,7 @@ int main(int argc, char** argv)
     parser.process(app); // PORTING SCRIPT: move this to after any parser.addOption
 
     if (parser.isSet("graphs")) {
-        // Don't change those lines to use dbgPigment derivatives, they need to be outputed
+        // Don't change those lines to use dbgPigment derivatives, they need to be outputted
         // to stdout not stderr.
         std::cout << "full : show all the connection on the graph" << std::endl;
         std::cout << "bestpath : show the best path for a given transformation" << std::endl;
@@ -110,7 +110,7 @@ int main(int argc, char** argv)
         file.close();
 
         if (QProcess::execute(cmd) != 0) {
-            errorPigment << "An error has occurred when executing : '" << cmd << "' the most likely cause is that 'dot' command is missing, and that you should install graphviz (from http://www.graphiz.org)";
+            errorPigment << "An error has occurred when executing : '" << cmd << "' the most likely cause is that 'dot' command is missing, and that you should install graphviz (from https://www.graphviz.org)";
         }
     } else {
         errorPigment << "Unknown output type : " << outputType;

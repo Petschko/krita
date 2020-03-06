@@ -127,6 +127,7 @@ private Q_SLOTS:
     void testRenderClipPath_Obb_Transform();
 
     void testRenderClipMask_Obb();
+    void testRenderClipMaskOnGroup_Obb();
     void testRenderClipMask_User_Clip_Obb();
     void testRenderClipMask_User_Clip_User();
 
@@ -158,7 +159,7 @@ private Q_SLOTS:
 
     void testMarkersDifferent();
 
-    void testGradientRecoveringTrasnform();
+    void testGradientRecoveringTransform();
     void testMarkersOnClosedPath();
     void testMarkersAngularUnits();
 

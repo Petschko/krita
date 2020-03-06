@@ -38,14 +38,12 @@
 #include <kis_debug.h>
 #include <QPoint>
 
-#include <kis_debug.h>
 #include <klocalizedstring.h>
 #include <kactioncollection.h>
-#include <QAction>
 
 #include <kis_icon.h>
 #include <KoShape.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoColorSpace.h>
 #include <KoPointerEvent.h>
 #include <KoColor.h>
@@ -76,7 +74,6 @@
 #include <kis_action_manager.h>
 #include <kis_action.h>
 #include "strokes/kis_color_picker_stroke_strategy.h"
-#include <kis_canvas_resource_provider.h>
 
 
 KisToolPaint::KisToolPaint(KoCanvasBase *canvas, const QCursor &cursor)
@@ -107,25 +104,8 @@ KisToolPaint::KisToolPaint(KoCanvasBase *canvas, const QCursor &cursor)
     }
 
     KisCanvas2 *kiscanvas = dynamic_cast<KisCanvas2*>(canvas);
-    KisActionManager *actionManager = kiscanvas->viewManager()->actionManager();
 
-    // XXX: Perhaps a better place for these?
-    if (!actionManager->actionByName("increase_brush_size")) {
-        KisAction *increaseBrushSize = new KisAction(i18n("Increase Brush Size"));
-        increaseBrushSize->setShortcut(Qt::Key_BracketRight);
-        actionManager->addAction("increase_brush_size", increaseBrushSize);
-    }
-
-    if (!actionManager->actionByName("decrease_brush_size")) {
-        KisAction *decreaseBrushSize = new KisAction(i18n("Decrease Brush Size"));
-        decreaseBrushSize->setShortcut(Qt::Key_BracketLeft);
-        actionManager->addAction("decrease_brush_size", decreaseBrushSize);
-    }
-
-    addAction("increase_brush_size", dynamic_cast<QAction *>(actionManager->actionByName("increase_brush_size")));
-    addAction("decrease_brush_size", dynamic_cast<QAction *>(actionManager->actionByName("decrease_brush_size")));
-
-    connect(this, SIGNAL(sigPaintingFinished()), kiscanvas->viewManager()->resourceProvider(), SLOT(slotPainting()));
+    connect(this, SIGNAL(sigPaintingFinished()), kiscanvas->viewManager()->canvasResourceProvider(), SLOT(slotPainting()));
 
     m_colorPickerDelayTimer.setSingleShot(true);
     connect(&m_colorPickerDelayTimer, SIGNAL(timeout()), this, SLOT(activatePickColorDelayed()));
@@ -177,7 +157,7 @@ void KisToolPaint::activate(ToolActivation toolActivation, const QSet<KoShape*> 
         connect(action("decrease_brush_size"), SIGNAL(triggered()), SLOT(decreaseBrushSize()), Qt::UniqueConnection);
     }
 
-    KisCanvasResourceProvider *provider = qobject_cast<KisCanvas2*>(canvas())->viewManager()->resourceProvider();
+    KisCanvasResourceProvider *provider = qobject_cast<KisCanvas2*>(canvas())->viewManager()->canvasResourceProvider();
     m_oldOpacity = provider->opacity();
     provider->setOpacity(m_localOpacity);
 }
@@ -189,7 +169,7 @@ void KisToolPaint::deactivate()
         disconnect(action("decrease_brush_size"), 0, this, 0);
     }
 
-    KisCanvasResourceProvider *provider = qobject_cast<KisCanvas2*>(canvas())->viewManager()->resourceProvider();
+    KisCanvasResourceProvider *provider = qobject_cast<KisCanvas2*>(canvas())->viewManager()->canvasResourceProvider();
     m_localOpacity = provider->opacity();
     provider->setOpacity(m_oldOpacity);
 
@@ -303,15 +283,15 @@ void KisToolPaint::activateAlternateAction(AlternateAction action)
 {
     switch (action) {
     case PickFgNode:
-        /* Falls through */
+        Q_FALLTHROUGH();
     case PickBgNode:
-        /* Falls through */
+        Q_FALLTHROUGH();
     case PickFgImage:
-        /* Falls through */
+        Q_FALLTHROUGH();
     case PickBgImage:
         delayedAction = action;
         m_colorPickerDelayTimer.start(100);
-        /* Falls through */
+        Q_FALLTHROUGH();
     default:
         pickColorWasOverridden();
         KisTool::activateAlternateAction(action);
@@ -451,13 +431,14 @@ int KisToolPaint::colorPreviewResourceId(AlternateAction action)
 {
     bool toForegroundColor = action == PickFgNode || action == PickFgImage;
     int resource = toForegroundColor ?
-        KoCanvasResourceManager::ForegroundColor : KoCanvasResourceManager::BackgroundColor;
+        KoCanvasResourceProvider::ForegroundColor : KoCanvasResourceProvider::BackgroundColor;
 
     return resource;
 }
 
-void KisToolPaint::slotColorPickingFinished(const KoColor &color)
+void KisToolPaint::slotColorPickingFinished(KoColor color)
 {
+    color.setOpacity(OPACITY_OPAQUE_U8);
     canvas()->resourceManager()->setResource(m_pickingResource, color);
 
     if (!m_showColorPreview) return;
@@ -515,7 +496,6 @@ QWidget * KisToolPaint::createOptionWidget()
 
     m_optionsWidgetLayout = new QGridLayout();
     m_optionsWidgetLayout->setColumnStretch(1, 1);
-
     verticalLayout->addLayout(m_optionsWidgetLayout);
     m_optionsWidgetLayout->setContentsMargins(0,0,0,0);
     m_optionsWidgetLayout->setSpacing(5);
@@ -523,8 +503,7 @@ QWidget * KisToolPaint::createOptionWidget()
     if (!quickHelp().isEmpty()) {
         QPushButton *push = new QPushButton(KisIconUtils::loadIcon("help-contents"), QString(), optionWidget);
         connect(push, SIGNAL(clicked()), this, SLOT(slotPopupQuickHelp()));
-
-        QHBoxLayout *hLayout = new QHBoxLayout(optionWidget);
+        QHBoxLayout *hLayout = new QHBoxLayout();
         hLayout->addWidget(push);
         hLayout->addItem(new QSpacerItem(0, 0, QSizePolicy::Expanding, QSizePolicy::Fixed));
         verticalLayout->addLayout(hLayout);
@@ -617,24 +596,6 @@ const KoCompositeOp* KisToolPaint::compositeOp()
 void KisToolPaint::slotPopupQuickHelp()
 {
     QWhatsThis::showText(QCursor::pos(), quickHelp());
-}
-
-KisToolPaint::NodePaintAbility KisToolPaint::nodePaintAbility()
-{
-    KisNodeSP node = currentNode();
-    if (!node) {
-        return NONE;
-    }
-    if (node->inherits("KisShapeLayer")) {
-        return VECTOR;
-    }
-    if (node->inherits("KisCloneLayer")) {
-        return CLONE;
-    }
-    if (node->paintDevice()) {
-        return PAINT;
-    }
-    return NONE;
 }
 
 void KisToolPaint::activatePrimaryAction()
@@ -740,7 +701,7 @@ void KisToolPaint::requestUpdateOutline(const QPointF &outlineDocPoint, const Ko
     QRectF outlineDocRect = currentImage()->pixelToDocument(outlinePixelRect);
 
     // This adjusted call is needed as we paint with a 3 pixel wide brush and the pen is outside the bounds of the path
-    // Pen uses view coordinates so we have to zoom the document value to match 2 pixel in view coordiates
+    // Pen uses view coordinates so we have to zoom the document value to match 2 pixel in view coordinates
     // See BUG 275829
     qreal zoomX;
     qreal zoomY;
@@ -795,9 +756,12 @@ QPainterPath KisToolPaint::getOutlinePath(const QPointF &documentPos,
 {
     Q_UNUSED(event);
 
-    QPointF imagePos = currentImage()->documentToPixel(documentPos);
+    KisCanvas2 *canvas2 = dynamic_cast<KisCanvas2 *>(canvas());
+    const KisCoordinatesConverter *converter = canvas2->coordinatesConverter();
+
     QPainterPath path = currentPaintOpPreset()->settings()->
-        brushOutline(KisPaintInformation(imagePos), outlineMode);
+        brushOutline(KisPaintInformation(convertToPixelCoord(documentPos)),
+                     outlineMode, converter->effectiveZoom());
 
     return path;
 }

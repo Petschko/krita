@@ -25,6 +25,7 @@
 #include "kritaimage_export.h"
 
 #include <QVector>
+#include <KisRegion.h>
 
 class QRect;
 class QStringList;
@@ -76,7 +77,7 @@ public:
     /**
      * Create an empty node without a parent.
      */
-    KisNode();
+    KisNode(KisImageWSP image);
 
     /**
      * Create a copy of this node. The copy will not have a parent
@@ -128,7 +129,7 @@ public:
      * this percolates up to parent nodes all the way to the root
      * node, if propagate is true;
      */
-    void setDirty(const QRegion &region);
+    void setDirty(const KisRegion &region);
 
     /**
      * Convenience override of multirect version of setDirtyDontResetAnimationCache()
@@ -188,13 +189,16 @@ public:
 
     /**
      * The rendering of the image may not always happen in the order
-     * of the main graph. Pass-through nodes ake some subgraphs
+     * of the main graph. Pass-through nodes make some subgraphs
      * linear, so it the order of rendering change. projectionLeaf()
      * is a special interface of KisNode that represents "a graph for
      * projection rendering". Therefore the nodes in projectionLeaf()
      * graph may have a different order the main one.
      */
     virtual KisProjectionLeafSP projectionLeaf() const;
+
+
+    void setImage(KisImageWSP image) override;
 
 protected:
 
@@ -206,7 +210,7 @@ protected:
      * a requested rect. E.g. we change a rect of 2x2, then we want to
      * apply a convolution filter with kernel 4x4 (changeRect is
      * (2+2*3)x(2+2*3)=8x8) to that area. The rect that should be updated
-     * on the layer will be exaclty 8x8. More than that the needRect for
+     * on the layer will be exactly 8x8. More than that the needRect for
      * that update will be 14x14. See \ref needeRect.
      */
     virtual QRect changeRect(const QRect &rect, PositionToFilthy pos = N_FILTHY) const;
@@ -233,7 +237,7 @@ protected:
      * Example. You have a layer that needs to prepare some rect on a
      * projection, say expectedRect. To perform this, the projection
      * of all the layers below of the size needRect(expectedRect)
-     * should be calculeated by the merger beforehand and the layer
+     * should be calculated by the merger beforehand and the layer
      * will access some other area of image inside the rect
      * accessRect(expectedRect) during updateProjection call.
      *
@@ -349,6 +353,12 @@ public: // Graph methods
      */
     KisNodeSP findChildByName(const QString &name);
 
+Q_SIGNALS:
+    /**
+     * Don't use this signal anywhere other than KisNodeShape. It's a hack.
+     */
+    void sigNodeChangedInternal();
+
 public:
 
     /**
@@ -374,6 +384,7 @@ protected:
     void notifyParentVisibilityChanged(bool value) override;
     void baseNodeChangedCallback() override;
     void baseNodeInvalidateAllFramesCallback() override;
+    void baseNodeCollapsedChangedCallback() override;
 
 protected:
     void addKeyframeChannel(KisKeyframeChannel* channel) override;

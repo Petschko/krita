@@ -93,8 +93,8 @@ KoResourceTaggingManager::KoResourceTaggingManager(KoResourceModel *model, QWidg
             this, SLOT(contextCreateNewTag(QString)));
     connect(d->tagChooser, SIGNAL(tagDeletionRequested(QString)),
             this, SLOT(removeTagFromComboBox(QString)));
-    connect(d->tagChooser, SIGNAL(tagRenamingRequested(QString, QString)),
-            this, SLOT(renameTag(QString, QString)));
+    connect(d->tagChooser, SIGNAL(tagRenamingRequested(QString,QString)),
+            this, SLOT(renameTag(QString,QString)));
     connect(d->tagChooser, SIGNAL(tagUndeletionRequested(QString)),
             this, SLOT(undeleteTag(QString)));
     connect(d->tagChooser, SIGNAL(tagUndeletionListPurgeRequested()),
@@ -301,10 +301,12 @@ void KoResourceTaggingManager::updateTaggedResourceView()
 
 void KoResourceTaggingManager::tagChooserIndexChanged(const QString& lineEditText)
 {
-    if (!d->tagChooser->selectedTagIsReadOnly()) {
-        d->currentTag = lineEditText;
+    // HACK This allows tag "All" to be written in kritarc BUG:
+    if (lineEditText == "All" || !d->tagChooser->selectedTagIsReadOnly()) {
         d->tagFilter->allowSave(true);
-        d->model->enableResourceFiltering(true);
+        d->currentTag = lineEditText;
+        d->model->enableResourceFiltering( (lineEditText == "All")? false : true);
+
     } else {
         d->model->enableResourceFiltering(false);
         d->tagFilter->allowSave(false);
@@ -362,14 +364,14 @@ void KoResourceTaggingManager::contextMenuRequested(KoResource* resource, const 
                                           d->tagChooser->currentlySelectedTag(),
                                           d->tagChooser->allTags());
 
-    connect(&menu, SIGNAL(resourceTagAdditionRequested(KoResource*, QString)),
-            this, SLOT(contextAddTagToResource(KoResource*, QString)));
+    connect(&menu, SIGNAL(resourceTagAdditionRequested(KoResource*,QString)),
+            this, SLOT(contextAddTagToResource(KoResource*,QString)));
 
-    connect(&menu, SIGNAL(resourceTagRemovalRequested(KoResource*, QString)),
-            this, SLOT(contextRemoveTagFromResource(KoResource*, QString)));
+    connect(&menu, SIGNAL(resourceTagRemovalRequested(KoResource*,QString)),
+            this, SLOT(contextRemoveTagFromResource(KoResource*,QString)));
 
-    connect(&menu, SIGNAL(resourceAssignmentToNewTagRequested(KoResource*, QString)),
-            this, SLOT(contextCreateNewTag(KoResource*, QString)));
+    connect(&menu, SIGNAL(resourceAssignmentToNewTagRequested(KoResource*,QString)),
+            this, SLOT(contextCreateNewTag(KoResource*,QString)));
     menu.exec(pos);
 }
 

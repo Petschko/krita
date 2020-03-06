@@ -32,7 +32,7 @@
 
 
 class KoPointerEvent;
-class KoCanvasResourceManager;
+class KoCanvasResourceProvider;
 class KisPaintingInformationBuilder;
 class KisStrokesFacade;
 class KisPostExecutionUndoAdapter;
@@ -47,6 +47,7 @@ class KRITAUI_EXPORT KisToolFreehandHelper : public QObject
 public:
 
     KisToolFreehandHelper(KisPaintingInformationBuilder *infoBuilder,
+                          KoCanvasResourceProvider *resourceManager,
                           const KUndo2MagicString &transactionText = KUndo2MagicString(),
                           KisSmoothingOptions *smoothingOptions = 0);
     ~KisToolFreehandHelper() override;
@@ -59,11 +60,17 @@ public:
     void cursorMoved(const QPointF &cursorPos);
 
     /**
-     * @param pixelCoords - The position of the KoPointerEvent, in pixel coordinates.
+     * @param event The event
+     * @param pixelCoords The position of the KoPointerEvent, in pixel coordinates.
+     * @param resourceManager The canvas resource manager
+     * @param image The image
+     * @param currentNode The current node
+     * @param strokesFacade The strokes facade
+     * @param overrideNode The override node
+     * @param bounds The bounds
      */
     void initPaint(KoPointerEvent *event,
                    const QPointF &pixelCoords,
-                   KoCanvasResourceManager *resourceManager,
                    KisImageWSP image,
                    KisNodeSP currentNode,
                    KisStrokesFacade *strokesFacade,
@@ -76,10 +83,7 @@ public:
                                 const KoPointerEvent *event,
                                 const KisPaintOpSettingsSP globalSettings,
                                 KisPaintOpSettings::OutlineMode mode) const;
-    int canvasRotation();
-    void setCanvasRotation(int rotation = 0);
-    bool canvasMirroredH();
-    void setCanvasHorizontalMirrorState (bool mirrored = false);
+
 Q_SIGNALS:
     /**
      * The signal is emitted when the outline should be updated
@@ -95,12 +99,14 @@ protected:
 
     void initPaintImpl(qreal startAngle,
                        const KisPaintInformation &pi,
-                       KoCanvasResourceManager *resourceManager,
+                       KoCanvasResourceProvider *resourceManager,
                        KisImageWSP image,
                        KisNodeSP node,
                        KisStrokesFacade *strokesFacade,
                        KisNodeSP overrideNode = 0,
                        KisDefaultBoundsBaseSP bounds = 0);
+
+    KoCanvasResourceProvider *resourceManager() const;
 
 protected:
 
@@ -144,10 +150,11 @@ private:
                                                const KisPaintInformation &lastPaintInfo);
     int computeAirbrushTimerInterval() const;
 
+    qreal currentZoom() const;
+
 private Q_SLOTS:
     void finishStroke();
     void doAirbrushing();
-    void doAsynchronousUpdate(bool forceUpdate = false);
     void stabilizerPollAndPaint();
     void slotSmoothingTypeChanged();
 

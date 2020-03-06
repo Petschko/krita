@@ -29,11 +29,11 @@
 
 #include "kis_image_animation_interface.h"
 #include "KisDocument.h"
+#include "KisNodeDisplayModeAdapter.h"
 #include "KisPart.h"
 #include "kis_name_server.h"
 #include "flake/kis_shape_controller.h"
 #include "kis_undo_adapter.h"
-
 
 #include "timeline_frames_view.h"
 #include "timeline_frames_model.h"
@@ -47,6 +47,7 @@
 #include "kis_int_parse_spin_box.h"
 
 #include  <sdk/tests/kistest.h>
+#include <sdk/tests/testutil.h>
 
 void TimelineModelTest::init()
 {
@@ -54,9 +55,12 @@ void TimelineModelTest::init()
 
     m_nameServer = new KisNameServer();
     m_shapeController = new KisShapeController(m_doc, m_nameServer);
+    m_displayModeAdapter = new KisNodeDisplayModeAdapter();
     //m_nodeModel = new KisNodeModel(0);
 
     initBase();
+
+    m_doc->setCurrentImage(m_image);
 }
 
 void TimelineModelTest::cleanup()
@@ -67,6 +71,7 @@ void TimelineModelTest::cleanup()
     delete m_shapeController;
     delete m_nameServer;
     delete m_doc;
+    delete m_displayModeAdapter;
 }
 
 #include "timeline_frames_index_converter.h"
@@ -94,7 +99,7 @@ void TimelineModelTest::testConverter()
     QCOMPARE(converter.dummyFromRow(1), m_shapeController->dummyForNode(m_layer2));
     QCOMPARE(converter.dummyFromRow(0), m_shapeController->dummyForNode(m_sel3));
 
-    TimelineNodeListKeeper keeper(0, m_shapeController);
+    TimelineNodeListKeeper keeper(0, m_shapeController, m_displayModeAdapter);
 
     QCOMPARE(keeper.rowCount(), 3);
     QCOMPARE(keeper.rowForDummy(m_shapeController->dummyForNode(m_layer1)), 2);
@@ -147,12 +152,21 @@ struct TestingInterface : TimelineFramesModel::NodeManipulationInterface
             new KisImageLayerRemoveCommand(m_image, node));
     }
 
+    bool setNodeProperties(KisNodeSP, KisImageSP, KisBaseNode::PropertyList) const override
+    {
+        return false;
+    }
+
 private:
     KisImageSP m_image;
 };
 
 void TimelineModelTest::testView()
 {
+#ifndef ENABLE_GUI_TESTS
+    return;
+#endif
+
     QDialog dlg;
 
     QFont font;
@@ -182,7 +196,7 @@ void TimelineModelTest::testView()
 
     framesTable->setModel(model);
 
-    model->setDummiesFacade(m_shapeController, m_image);
+    model->setDummiesFacade(m_shapeController, m_image, m_displayModeAdapter);
     model->setNodeManipulationInterface(new TestingInterface(m_image));
 
     m_layer1->enableAnimation();
@@ -272,6 +286,9 @@ void TimelineModelTest::slotGuiChangedNode(KisNodeSP node)
 
 void TimelineModelTest::testOnionSkins()
 {
+#ifndef ENABLE_GUI_TESTS
+    return;
+#endif
     QDialog dlg;
 
     QFont font;

@@ -25,16 +25,16 @@
 #include "kis_floating_message.h"
 
 #include <QApplication>
-#include <QDesktopWidget>
+#include <QScreen>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTimer>
 #include <QRegExp>
+#include <QDesktopWidget>
 
 #include <kis_icon.h>
 #include <kis_debug.h>
 #include "kis_global.h"
-
 
 /* Code copied from kshadowengine.cpp
  *
@@ -128,8 +128,9 @@ KisFloatingMessage::KisFloatingMessage(const QString &message, QWidget *parent, 
     , m_timeout(timeout)
     , m_priority(priority)
     , m_alignment(alignment)
+    , widgetQueuedForDeletion(false)
 {
-    m_icon = KisIconUtils::loadIcon("calligrakrita").pixmap(256, 256).toImage();
+    m_icon = KisIconUtils::loadIcon("krita").pixmap(256, 256).toImage();
 
     setWindowFlags(Qt::FramelessWindowHint | Qt::ToolTip);
     setFocusPolicy(Qt::NoFocus);
@@ -139,6 +140,7 @@ KisFloatingMessage::KisFloatingMessage(const QString &message, QWidget *parent, 
 
     m_timer.setSingleShot( true );
     connect(&m_timer, SIGNAL(timeout()), SLOT(startFade()));
+    connect(this, SIGNAL(destroyed()), SLOT(widgetDeleted()));
 }
 
 void KisFloatingMessage::tryOverrideMessage(const QString message,
@@ -160,8 +162,12 @@ void KisFloatingMessage::tryOverrideMessage(const QString message,
 
 void KisFloatingMessage::showMessage()
 {
-
+    if (widgetQueuedForDeletion) return;
+#if QT_VERSION >= QT_VERSION_CHECK(5,13,0)
+    setGeometry(determineMetrics(fontMetrics().horizontalAdvance('x')));
+#else
     setGeometry(determineMetrics(fontMetrics().width('x')));
+#endif
     setWindowOpacity(OSD_WINDOW_OPACITY);
 
     QWidget::setVisible(true);
@@ -189,7 +195,13 @@ QRect KisFloatingMessage::determineMetrics( const int M )
     // determine a sensible maximum size, don't cover the whole desktop or cross the screen
     const QSize margin( (M + MARGIN) * 2, (M + MARGIN) * 2); //margins
     const QSize image = m_icon.isNull() ? QSize(0, 0) : minImageSize;
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
+    QScreen *s = qApp->screenAt(parentWidget()->geometry().topLeft());
+    const QSize max = s->availableGeometry().size() - margin;
+#else
     const QSize max = QApplication::desktop()->availableGeometry(parentWidget()).size() - margin;
+#endif
+
 
     // If we don't do that, the boundingRect() might not be suitable for drawText() (Qt issue N67674)
     m_message.replace(QRegExp( " +\n"), "\n");
@@ -220,7 +232,12 @@ QRect KisFloatingMessage::determineMetrics( const int M )
 
 
     const QSize newSize = rect.size();
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
+    QRect screen = s->availableGeometry();
+#else
     QRect screen = QApplication::desktop()->screenGeometry(parentWidget());
+#endif
+
 
     QPoint newPos(MARGIN, MARGIN);
 
@@ -320,6 +337,7 @@ void KisFloatingMessage::removeMessage()
 {
     m_timer.stop();
     m_fadeTimeLine.stop();
+    widgetQueuedForDeletion = true;
 
     hide();
     deleteLater();
@@ -328,4 +346,9 @@ void KisFloatingMessage::removeMessage()
 void KisFloatingMessage::updateOpacity(int /*value*/)
 {
     setWindowOpacity(OSD_WINDOW_OPACITY - 0.1);
+}
+
+void KisFloatingMessage::widgetDeleted()
+{
+    widgetQueuedForDeletion = false;
 }

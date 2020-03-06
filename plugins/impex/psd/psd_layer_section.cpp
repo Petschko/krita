@@ -45,12 +45,9 @@
 
 
 PSDLayerMaskSection::PSDLayerMaskSection(const PSDHeader& header)
-    : globalInfoSection(header),
-      m_header(header)
+    : globalInfoSection(header)
+    , m_header(header)
 {
-    hasTransparency = false;
-    layerMaskBlockSize = 0;
-    nLayers = 0;
 }
 
 PSDLayerMaskSection::~PSDLayerMaskSection()
@@ -327,9 +324,8 @@ void flattenNodes(KisNodeSP node, QList<FlattenedNode> &nodes)
 {
     KisNodeSP child = node->firstChild();
     while (child) {
-
-        bool isGroupLayer = child->inherits("KisGroupLayer");
-        bool isRasterLayer = child->inherits("KisPaintLayer") || child->inherits("KisShapeLayer");
+        const bool isLayer = child->inherits("KisLayer");
+        const bool isGroupLayer = child->inherits("KisGroupLayer");
 
         if (isGroupLayer) {
             {
@@ -347,7 +343,7 @@ void flattenNodes(KisNodeSP node, QList<FlattenedNode> &nodes)
                 item.type = FlattenedNode::FOLDER_OPEN;
                 nodes << item;
             }
-        } else if (isRasterLayer) {
+        } else if (isLayer) {
             FlattenedNode item;
             item.node = child;
             item.type = FlattenedNode::RASTER_LAYER;

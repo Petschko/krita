@@ -205,14 +205,13 @@ public:
         Vc::float_v vXLimit(m_xLimit);
         Vc::float_v vYLimit(m_yLimit);
 
-
-        Vc::float_m outXMask = xr > vXLimit;
-        Vc::float_m outYMask = yr > vYLimit;
+        Vc::float_m outXMask = Vc::abs(xr) > vXLimit;
+        Vc::float_m outYMask = Vc::abs(yr) > vYLimit;
 
         return (outXMask | outYMask);
     }
 
-    // Apply fader separatedly to avoid calculating vValue twice.
+    // Apply fader separately to avoid calculating vValue twice.
     void apply2DFader(Vc::float_v &vValue, Vc::float_m &excludeMask, Vc::float_v &xr, Vc::float_v &yr) const {
         const Vc::float_v vValMax(255.f);
 

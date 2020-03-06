@@ -18,8 +18,6 @@
 
 #include "kis_config.h"
 
-#include <limits.h>
-
 #include <QtGlobal>
 #include <QApplication>
 #include <QDesktopWidget>
@@ -29,6 +27,7 @@
 #include <QStringList>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QDebug>
 
 #include <kconfig.h>
 
@@ -49,14 +48,20 @@
 #include <config-ocio.h>
 
 #include <kis_color_manager.h>
-#include <kis_debug.h>
+#include <KisOcioConfiguration.h>
+#include <KisUsageLogger.h>
+#include <kis_image_config.h>
+
+#ifdef Q_OS_WIN
+#include "config_use_qt_tablet_windows.h"
+#endif
 
 KisConfig::KisConfig(bool readOnly)
     : m_cfg( KSharedConfig::openConfig()->group(""))
     , m_readOnly(readOnly)
 {
     if (!readOnly) {
-        KIS_SAFE_ASSERT_RECOVER_RETURN(qApp->thread() == QThread::currentThread());
+        KIS_SAFE_ASSERT_RECOVER_RETURN(qApp && qApp->thread() == QThread::currentThread());
     }
 }
 
@@ -64,7 +69,7 @@ KisConfig::~KisConfig()
 {
     if (m_readOnly) return;
 
-    if (qApp->thread() != QThread::currentThread()) {
+    if (qApp && qApp->thread() != QThread::currentThread()) {
         dbgKrita << "WARNING: KisConfig: requested config synchronization from nonGUI thread! Called from:" << kisBacktrace();
         return;
     }
@@ -72,6 +77,42 @@ KisConfig::~KisConfig()
     m_cfg.sync();
 }
 
+void KisConfig::logImportantSettings() const
+{
+    KisUsageLogger::writeSysInfo("Current Settings\n");
+    KisUsageLogger::writeSysInfo(QString("  Current Swap Location: %1").arg(KisImageConfig(true).swapDir()));
+    KisUsageLogger::writeSysInfo(QString("  Undo Enabled: %1").arg(undoEnabled()));
+    KisUsageLogger::writeSysInfo(QString("  Undo Stack Limit: %1").arg(undoStackLimit()));
+    KisUsageLogger::writeSysInfo(QString("  Use OpenGL: %1").arg(useOpenGL()));
+    KisUsageLogger::writeSysInfo(QString("  Use OpenGL Texture Buffer: %1").arg(useOpenGLTextureBuffer()));
+    KisUsageLogger::writeSysInfo(QString("  Use AMD Vectorization Workaround: %1").arg(enableAmdVectorizationWorkaround()));
+    KisUsageLogger::writeSysInfo(QString("  Canvas State: %1").arg(canvasState()));
+    KisUsageLogger::writeSysInfo(QString("  Autosave Interval: %1").arg(autoSaveInterval()));
+    KisUsageLogger::writeSysInfo(QString("  Use Backup Files: %1").arg(backupFile()));
+    KisUsageLogger::writeSysInfo(QString("  Number of Backups Kept: %1").arg(m_cfg.readEntry("numberofbackupfiles", 1)));
+    KisUsageLogger::writeSysInfo(QString("  Backup File Suffix: %1").arg(m_cfg.readEntry("backupfilesuffix", "~")));
+
+    QString backupDir;
+    switch(m_cfg.readEntry("backupfilelocation", 0)) {
+    case 1:
+        backupDir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+        break;
+    case 2:
+        backupDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
+        break;
+    default:
+        // Do nothing: the empty string is user file location
+        backupDir = "Same Folder as the File";
+    }
+    KisUsageLogger::writeSysInfo(QString("  Backup Location: %1").arg(backupDir));
+
+    KisUsageLogger::writeSysInfo(QString("  Use Win8 Pointer Input: %1").arg(useWin8PointerInput()));
+    KisUsageLogger::writeSysInfo(QString("  Use RightMiddleTabletButton Workaround: %1").arg(useRightMiddleTabletButtonWorkaround()));
+    KisUsageLogger::writeSysInfo(QString("  Levels of Detail Enabled: %1").arg(levelOfDetailEnabled()));
+    KisUsageLogger::writeSysInfo(QString("  Use Zip64: %1").arg(useZip64()));
+
+    KisUsageLogger::writeSysInfo("\n");
+}
 
 bool KisConfig::disableTouchOnCanvas(bool defaultValue) const
 {
@@ -81,6 +122,16 @@ bool KisConfig::disableTouchOnCanvas(bool defaultValue) const
 void KisConfig::setDisableTouchOnCanvas(bool value) const
 {
     m_cfg.writeEntry("disableTouchOnCanvas", value);
+}
+
+bool KisConfig::disableTouchRotation(bool defaultValue) const
+{
+    return (defaultValue ? false : m_cfg.readEntry("disableTouchRotation", false));
+}
+
+void KisConfig::setDisableTouchRotation(bool value) const
+{
+    m_cfg.writeEntry("disableTouchRotation", value);
 }
 
 bool KisConfig::useProjections(bool defaultValue) const
@@ -369,7 +420,7 @@ void KisConfig::setColorPreviewRect(const QRect &rect)
 
 bool KisConfig::useDirtyPresets(bool defaultValue) const
 {
-   return (defaultValue ? false : m_cfg.readEntry("useDirtyPresets",false));
+   return (defaultValue ? false : m_cfg.readEntry("useDirtyPresets", true));
 }
 void KisConfig::setUseDirtyPresets(bool value)
 {
@@ -379,7 +430,7 @@ void KisConfig::setUseDirtyPresets(bool value)
 
 bool KisConfig::useEraserBrushSize(bool defaultValue) const
 {
-   return (defaultValue ? false : m_cfg.readEntry("useEraserBrushSize",false));
+   return (defaultValue ? false : m_cfg.readEntry("useEraserBrushSize", false));
 }
 
 void KisConfig::setUseEraserBrushSize(bool value)
@@ -400,15 +451,18 @@ void KisConfig::setUseEraserBrushOpacity(bool value)
 }
 
 
-QColor KisConfig::getMDIBackgroundColor(bool defaultValue) const
+QString KisConfig::getMDIBackgroundColor(bool defaultValue) const
 {
     QColor col(77, 77, 77);
-    return (defaultValue ? col : m_cfg.readEntry("mdiBackgroundColor", col));
+    KoColor kol(KoColorSpaceRegistry::instance()->rgb8());
+    kol.fromQColor(col);
+    QString xml = kol.toXML();
+    return (defaultValue ? xml : m_cfg.readEntry("mdiBackgroundColorXML", xml));
 }
 
-void KisConfig::setMDIBackgroundColor(const QColor &v) const
+void KisConfig::setMDIBackgroundColor(const QString &v) const
 {
-    m_cfg.writeEntry("mdiBackgroundColor", v);
+    m_cfg.writeEntry("mdiBackgroundColorXML", v);
 }
 
 QString KisConfig::getMDIBackgroundImage(bool defaultValue) const
@@ -464,16 +518,12 @@ const KoColorProfile *KisConfig::getScreenProfile(int screen)
     QByteArray bytes = KisColorManager::instance()->displayProfile(monitorId);
 
     //dbgKrita << "\tgetScreenProfile()" << bytes.size();
-
+    const KoColorProfile * profile = 0;
     if (bytes.length() > 0) {
-        const KoColorProfile *profile = KoColorSpaceRegistry::instance()->createColorProfile(RGBAColorModelID.id(), Integer8BitsColorDepthID.id(), bytes);
+        profile = KoColorSpaceRegistry::instance()->createColorProfile(RGBAColorModelID.id(), Integer8BitsColorDepthID.id(), bytes);
         //dbgKrita << "\tKisConfig::getScreenProfile for screen" << screen << profile->name();
-        return profile;
     }
-    else {
-        //dbgKrita << "\tCould not get a system monitor profile";
-        return 0;
-    }
+    return profile;
 }
 
 const KoColorProfile *KisConfig::displayProfile(int screen) const
@@ -576,6 +626,15 @@ void KisConfig::setAllowLCMSOptimization(bool allowLCMSOptimization)
     m_cfg.writeEntry("allowLCMSOptimization", allowLCMSOptimization);
 }
 
+bool KisConfig::forcePaletteColors(bool defaultValue) const
+{
+    return (defaultValue ? false : m_cfg.readEntry("colorsettings/forcepalettecolors", false));
+}
+
+void KisConfig::setForcePaletteColors(bool forcePaletteColors)
+{
+    m_cfg.writeEntry("colorsettings/forcepalettecolors", forcePaletteColors);
+}
 
 bool KisConfig::showRulers(bool defaultValue) const
 {
@@ -649,22 +708,18 @@ bool KisConfig::useOpenGL(bool defaultValue) const
         return true;
     }
 
-    //dbgKrita << "use opengl" << m_cfg.readEntry("useOpenGL", true) << "success" << m_cfg.readEntry("canvasState", "OPENGL_SUCCESS");
-    QString cs = canvasState();
-#ifdef Q_OS_WIN
-    return (m_cfg.readEntry("useOpenGLWindows", true) && (cs == "OPENGL_SUCCESS" || cs == "TRY_OPENGL"));
-#else
-    return (m_cfg.readEntry("useOpenGL", true) && (cs == "OPENGL_SUCCESS" || cs == "TRY_OPENGL"));
-#endif
+    const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+
+    return kritarc.value("OpenGLRenderer", "auto").toString() != "none";
 }
 
-void KisConfig::setUseOpenGL(bool useOpenGL) const
+void KisConfig::disableOpenGL() const
 {
-#ifdef Q_OS_WIN
-    m_cfg.writeEntry("useOpenGLWindows", useOpenGL);
-#else
-    m_cfg.writeEntry("useOpenGL", useOpenGL);
-#endif
+    const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+
+    kritarc.setValue("OpenGLRenderer", "none");
 }
 
 int KisConfig::openGLFilteringMode(bool defaultValue) const
@@ -840,6 +895,7 @@ void KisConfig::loadSnapConfig(KisSnapConfig *config, bool defaultValue) const
     config->setBoundingBox(m_cfg.readEntry("globalSnapBoundingBox", defaultConfig.boundingBox()));
     config->setImageBounds(m_cfg.readEntry("globalSnapImageBounds", defaultConfig.imageBounds()));
     config->setImageCenter(m_cfg.readEntry("globalSnapImageCenter", defaultConfig.imageCenter()));
+    config->setToPixel(m_cfg.readEntry("globalSnapToPixel", defaultConfig.toPixel()));
 }
 
 void KisConfig::saveSnapConfig(const KisSnapConfig &config)
@@ -851,15 +907,21 @@ void KisConfig::saveSnapConfig(const KisSnapConfig &config)
     m_cfg.writeEntry("globalSnapBoundingBox", config.boundingBox());
     m_cfg.writeEntry("globalSnapImageBounds", config.imageBounds());
     m_cfg.writeEntry("globalSnapImageCenter", config.imageCenter());
+    m_cfg.writeEntry("globalSnapToPixel", config.toPixel());
 }
 
 qint32 KisConfig::checkSize(bool defaultValue) const
 {
-    return (defaultValue ? 32 : m_cfg.readEntry("checksize", 32));
+    qint32 size = (defaultValue ? 32 : m_cfg.readEntry("checksize", 32));
+    if (size == 0) size = 32;
+    return size;
 }
 
 void KisConfig::setCheckSize(qint32 checksize) const
 {
+    if (checksize == 0) {
+        checksize = 32;
+    }
     m_cfg.writeEntry("checksize", checksize);
 }
 
@@ -1109,24 +1171,61 @@ void KisConfig::setPressureTabletCurve(const QString& curveString) const
 bool KisConfig::useWin8PointerInput(bool defaultValue) const
 {
 #ifdef Q_OS_WIN
+#ifdef USE_QT_TABLET_WINDOWS
+    const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+
+    return useWin8PointerInputNoApp(&kritarc, defaultValue);
+#else
     return (defaultValue ? false : m_cfg.readEntry("useWin8PointerInput", false));
+#endif
 #else
     Q_UNUSED(defaultValue);
     return false;
 #endif
 }
 
-void KisConfig::setUseWin8PointerInput(bool value) const
+void KisConfig::setUseWin8PointerInput(bool value)
 {
 #ifdef Q_OS_WIN
+
     // Special handling: Only set value if changed
     // I don't want it to be set if the user hasn't touched it
     if (useWin8PointerInput() != value) {
+
+#ifdef USE_QT_TABLET_WINDOWS
+        const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+        QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+        setUseWin8PointerInputNoApp(&kritarc, value);
+#else
         m_cfg.writeEntry("useWin8PointerInput", value);
+#endif
+
     }
+
 #else
     Q_UNUSED(value)
 #endif
+}
+
+bool KisConfig::useWin8PointerInputNoApp(QSettings *settings, bool defaultValue)
+{
+    return defaultValue ? false : settings->value("useWin8PointerInput", false).toBool();
+}
+
+void KisConfig::setUseWin8PointerInputNoApp(QSettings *settings, bool value)
+{
+    settings->setValue("useWin8PointerInput", value);
+}
+
+bool KisConfig::useRightMiddleTabletButtonWorkaround(bool defaultValue) const
+{
+    return (defaultValue ? false : m_cfg.readEntry("useRightMiddleTabletButtonWorkaround", false));
+}
+
+void KisConfig::setUseRightMiddleTabletButtonWorkaround(bool value)
+{
+    m_cfg.writeEntry("useRightMiddleTabletButtonWorkaround", value);
 }
 
 qreal KisConfig::vastScrolling(bool defaultValue) const
@@ -1291,7 +1390,9 @@ void KisConfig::setFullscreenMode(const bool value) const
 
 QStringList KisConfig::favoriteCompositeOps(bool defaultValue) const
 {
-    return (defaultValue ? QStringList() : m_cfg.readEntry("favoriteCompositeOps", QStringList()));
+    return (defaultValue ? QStringList() :
+                           m_cfg.readEntry("favoriteCompositeOps",
+                                           QString("normal,erase,multiply,burn,darken,add,dodge,screen,overlay,soft_light_svg,luminize,lighten,saturation,color,divide").split(',')));
 }
 
 void KisConfig::setFavoriteCompositeOps(const QStringList& compositeOps) const
@@ -1299,9 +1400,17 @@ void KisConfig::setFavoriteCompositeOps(const QStringList& compositeOps) const
     m_cfg.writeEntry("favoriteCompositeOps", compositeOps);
 }
 
-QString KisConfig::exportConfiguration(const QString &filterId, bool defaultValue) const
+QString KisConfig::exportConfigurationXML(const QString &filterId, bool defaultValue) const
 {
     return (defaultValue ? QString() : m_cfg.readEntry("ExportConfiguration-" + filterId, QString()));
+}
+
+KisPropertiesConfigurationSP KisConfig::exportConfiguration(const QString &filterId, bool defaultValue) const
+{
+    KisPropertiesConfigurationSP cfg = new KisPropertiesConfiguration();
+    const QString xmlData = exportConfigurationXML(filterId, defaultValue);
+    cfg->fromXML(xmlData);
+    return cfg;
 }
 
 void KisConfig::setExportConfiguration(const QString &filterId, KisPropertiesConfigurationSP properties) const
@@ -1356,36 +1465,46 @@ void KisConfig::setLevelOfDetailEnabled(bool value)
     m_cfg.writeEntry("levelOfDetailEnabled", value);
 }
 
+KisOcioConfiguration KisConfig::ocioConfiguration(bool defaultValue) const
+{
+    KisOcioConfiguration cfg;
+
+    if (!defaultValue) {
+        cfg.mode = (KisOcioConfiguration::Mode)m_cfg.readEntry("Krita/Ocio/OcioColorManagementMode", 0);
+        cfg.configurationPath = m_cfg.readEntry("Krita/Ocio/OcioConfigPath", QString());
+        cfg.lutPath = m_cfg.readEntry("Krita/Ocio/OcioLutPath", QString());
+        cfg.inputColorSpace = m_cfg.readEntry("Krita/Ocio/InputColorSpace", QString());
+        cfg.displayDevice = m_cfg.readEntry("Krita/Ocio/DisplayDevice", QString());
+        cfg.displayView = m_cfg.readEntry("Krita/Ocio/DisplayView", QString());
+        cfg.look = m_cfg.readEntry("Krita/Ocio/DisplayLook", QString());
+    }
+
+    return cfg;
+}
+
+void KisConfig::setOcioConfiguration(const KisOcioConfiguration &cfg)
+{
+    m_cfg.writeEntry("Krita/Ocio/OcioColorManagementMode", (int) cfg.mode);
+    m_cfg.writeEntry("Krita/Ocio/OcioConfigPath", cfg.configurationPath);
+    m_cfg.writeEntry("Krita/Ocio/OcioLutPath", cfg.lutPath);
+    m_cfg.writeEntry("Krita/Ocio/InputColorSpace", cfg.inputColorSpace);
+    m_cfg.writeEntry("Krita/Ocio/DisplayDevice", cfg.displayDevice);
+    m_cfg.writeEntry("Krita/Ocio/DisplayView", cfg.displayView);
+    m_cfg.writeEntry("Krita/Ocio/DisplayLook", cfg.look);
+}
+
 KisConfig::OcioColorManagementMode
 KisConfig::ocioColorManagementMode(bool defaultValue) const
 {
+    // FIXME: this option duplicates ocioConfiguration(), please deprecate it
     return (OcioColorManagementMode)(defaultValue ? INTERNAL
                                                   : m_cfg.readEntry("Krita/Ocio/OcioColorManagementMode", (int) INTERNAL));
 }
 
 void KisConfig::setOcioColorManagementMode(OcioColorManagementMode mode) const
 {
+    // FIXME: this option duplicates ocioConfiguration(), please deprecate it
     m_cfg.writeEntry("Krita/Ocio/OcioColorManagementMode", (int) mode);
-}
-
-QString KisConfig::ocioConfigurationPath(bool defaultValue) const
-{
-    return (defaultValue ? QString() : m_cfg.readEntry("Krita/Ocio/OcioConfigPath", QString()));
-}
-
-void KisConfig::setOcioConfigurationPath(const QString &path) const
-{
-    m_cfg.writeEntry("Krita/Ocio/OcioConfigPath", path);
-}
-
-QString KisConfig::ocioLutPath(bool defaultValue) const
-{
-    return (defaultValue ? QString() : m_cfg.readEntry("Krita/Ocio/OcioLutPath", QString()));
-}
-
-void KisConfig::setOcioLutPath(const QString &path) const
-{
-    m_cfg.writeEntry("Krita/Ocio/OcioLutPath", path);
 }
 
 int KisConfig::ocioLutEdgeSize(bool defaultValue) const
@@ -1433,6 +1552,16 @@ QString KisConfig::toolbarSlider(int sliderNumber, bool defaultValue) const
 void KisConfig::setToolbarSlider(int sliderNumber, const QString &slider)
 {
     m_cfg.writeEntry(QString("toolbarslider_%1").arg(sliderNumber), slider);
+}
+
+int KisConfig::layerThumbnailSize(bool defaultValue) const
+{
+    return (defaultValue ? 20 : m_cfg.readEntry("layerThumbnailSize", 20));
+}
+
+void KisConfig::setLayerThumbnailSize(int size)
+{
+    m_cfg.writeEntry("layerThumbnailSize", size);
 }
 
 bool KisConfig::sliderLabels(bool defaultValue) const
@@ -1530,14 +1659,14 @@ QColor KisConfig::defaultBackgroundColor(bool defaultValue) const
   return (defaultValue ? QColor(Qt::white) : m_cfg.readEntry("BackgroundColorForNewImage", QColor(Qt::white)));
 }
 
-void KisConfig::setDefaultBackgroundColor(QColor value)
+void KisConfig::setDefaultBackgroundColor(const QColor &value)
 {
   m_cfg.writeEntry("BackgroundColorForNewImage", value);
 }
 
 KisConfig::BackgroundStyle KisConfig::defaultBackgroundStyle(bool defaultValue) const
 {
-  return (KisConfig::BackgroundStyle)(defaultValue ? LAYER : m_cfg.readEntry("BackgroundStyleForNewImage", (int)LAYER));
+  return (KisConfig::BackgroundStyle)(defaultValue ? RASTER_LAYER : m_cfg.readEntry("BackgroundStyleForNewImage", (int)RASTER_LAYER));
 }
 
 void KisConfig::setDefaultBackgroundStyle(KisConfig::BackgroundStyle value)
@@ -1715,9 +1844,25 @@ void KisConfig::setToolOptionsInDocker(bool inDocker)
     m_cfg.writeEntry("ToolOptionsInDocker", inDocker);
 }
 
+bool KisConfig::kineticScrollingEnabled(bool defaultValue) const
+{
+    return (defaultValue ? true : m_cfg.readEntry("KineticScrollingEnabled", true));
+}
+
+void KisConfig::setKineticScrollingEnabled(bool value)
+{
+    m_cfg.writeEntry("KineticScrollingEnabled", value);
+}
+
 int KisConfig::kineticScrollingGesture(bool defaultValue) const
 {
-    return (defaultValue ? 0 : m_cfg.readEntry("KineticScrollingGesture", 0));
+#ifdef Q_OS_ANDROID
+    int defaultGesture = 0; // TouchGesture
+#else
+    int defaultGesture = 2; // MiddleMouseButtonGesture
+#endif
+
+    return (defaultValue ? defaultGesture : m_cfg.readEntry("KineticScrollingGesture", defaultGesture));
 }
 
 void KisConfig::setKineticScrollingGesture(int gesture)
@@ -1735,14 +1880,14 @@ void KisConfig::setKineticScrollingSensitivity(int sensitivity)
     m_cfg.writeEntry("KineticScrollingSensitivity", sensitivity);
 }
 
-bool KisConfig::kineticScrollingScrollbar(bool defaultValue) const
+bool KisConfig::kineticScrollingHiddenScrollbars(bool defaultValue) const
 {
-    return (defaultValue ? true : m_cfg.readEntry("KineticScrollingScrollbar", true));
+    return (defaultValue ? false : m_cfg.readEntry("KineticScrollingHideScrollbar", false));
 }
 
-void KisConfig::setKineticScrollingScrollbar(bool scrollbar)
+void KisConfig::setKineticScrollingHideScrollbars(bool scrollbar)
 {
-    m_cfg.writeEntry("KineticScrollingScrollbar", scrollbar);
+    m_cfg.writeEntry("KineticScrollingHideScrollbar", scrollbar);
 }
 
 const KoColorSpace* KisConfig::customColorSelectorColorSpace(bool defaultValue) const
@@ -1806,6 +1951,16 @@ void KisConfig::setEnableAmdVectorizationWorkaround(bool value)
 bool KisConfig::enableAmdVectorizationWorkaround(bool defaultValue) const
 {
     return (defaultValue ? false : m_cfg.readEntry("amdDisableVectorWorkaround", false));
+}
+
+void KisConfig::setDisableAVXOptimizations(bool value)
+{
+    m_cfg.writeEntry("disableAVXOptimizations", value);
+}
+
+bool KisConfig::disableAVXOptimizations(bool defaultValue) const
+{
+    return (defaultValue ? false : m_cfg.readEntry("disableAVXOptimizations", false));
 }
 
 void KisConfig::setAnimationDropFrames(bool value)
@@ -1904,16 +2059,6 @@ void KisConfig::setStabilizerDelayedPaint(bool value)
     m_cfg.writeEntry("stabilizerDelayedPaint", value);
 }
 
-QString KisConfig::customFFMpegPath(bool defaultValue) const
-{
-    return defaultValue ? QString() : m_cfg.readEntry("ffmpegExecutablePath", QString());
-}
-
-void KisConfig::setCustomFFMpegPath(const QString &value) const
-{
-    m_cfg.writeEntry("ffmpegExecutablePath", value);
-}
-
 bool KisConfig::showBrushHud(bool defaultValue) const
 {
     return defaultValue ? false : m_cfg.readEntry("showBrushHud", false);
@@ -1956,6 +2101,85 @@ void KisConfig::setDefaultAssistantsColor(const QColor &color) const
     m_cfg.writeEntry("defaultAssistantsColor", color);
 }
 
+bool KisConfig::autoSmoothBezierCurves(bool defaultValue) const
+{
+    return defaultValue ? false : m_cfg.readEntry("autoSmoothBezierCurves", false);
+}
+
+void KisConfig::setAutoSmoothBezierCurves(bool value)
+{
+    m_cfg.writeEntry("autoSmoothBezierCurves", value);
+}
+
+bool KisConfig::activateTransformToolAfterPaste(bool defaultValue) const
+{
+    return defaultValue ? false : m_cfg.readEntry("activateTransformToolAfterPaste", false);
+}
+
+void KisConfig::setActivateTransformToolAfterPaste(bool value)
+{
+    m_cfg.writeEntry("activateTransformToolAfterPaste", value);
+}
+
+KisConfig::RootSurfaceFormat KisConfig::rootSurfaceFormat(bool defaultValue) const
+{
+    const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+
+    return rootSurfaceFormat(&kritarc, defaultValue);
+}
+
+void KisConfig::setRootSurfaceFormat(KisConfig::RootSurfaceFormat value)
+{
+    const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+
+    setRootSurfaceFormat(&kritarc, value);
+}
+
+KisConfig::RootSurfaceFormat KisConfig::rootSurfaceFormat(QSettings *displayrc, bool defaultValue)
+{
+    QString textValue = "bt709-g22";
+
+    if (!defaultValue) {
+        textValue = displayrc->value("rootSurfaceFormat", textValue).toString();
+    }
+
+    return textValue == "bt709-g10" ? BT709_G10 :
+           textValue == "bt2020-pq" ? BT2020_PQ :
+           BT709_G22;
+}
+
+void KisConfig::setRootSurfaceFormat(QSettings *displayrc, KisConfig::RootSurfaceFormat value)
+{
+    const QString textValue =
+        value == BT709_G10 ? "bt709-g10" :
+        value == BT2020_PQ ? "bt2020-pq" :
+        "bt709-g22";
+
+    displayrc->setValue("rootSurfaceFormat", textValue);
+}
+
+bool KisConfig::useZip64(bool defaultValue) const
+{
+    return defaultValue ? false : m_cfg.readEntry("UseZip64", false);
+}
+
+void KisConfig::setUseZip64(bool value)
+{
+    m_cfg.writeEntry("UseZip64", value);
+}
+
+bool KisConfig::convertLayerColorSpaceInProperties(bool defaultValue) const
+{
+    return defaultValue ? true : m_cfg.readEntry("convertLayerColorSpaceInProperties", true);
+}
+
+void KisConfig::setConvertLayerColorSpaceInProperties(bool value)
+{
+    m_cfg.writeEntry("convertLayerColorSpaceInProperties", value);
+}
+
 #include <QDomDocument>
 #include <QDomElement>
 
@@ -1969,18 +2193,22 @@ void KisConfig::writeKoColor(const QString& name, const KoColor& color) const
 }
 
 //ported from kispropertiesconfig.
-KoColor KisConfig::readKoColor(const QString& name, const KoColor& color) const
+KoColor KisConfig::readKoColor(const QString& name, const KoColor& _color) const
 {
     QDomDocument doc;
+
+    KoColor color = _color;
+
     if (!m_cfg.readEntry(name).isNull()) {
         doc.setContent(m_cfg.readEntry(name));
         QDomElement e = doc.documentElement().firstChild().toElement();
-        return KoColor::fromXML(e, Integer16BitsColorDepthID.id());
-    } else {
+        color = KoColor::fromXML(e, Integer16BitsColorDepthID.id());
+    }
+    else {
         QString blackColor = "<!DOCTYPE Color>\n<Color>\n <RGB r=\"0\" space=\"sRGB-elle-V2-srgbtrc.icc\" b=\"0\" g=\"0\"/>\n</Color>\n";
         doc.setContent(blackColor);
         QDomElement e = doc.documentElement().firstChild().toElement();
-        return KoColor::fromXML(e, Integer16BitsColorDepthID.id());
+        color =  KoColor::fromXML(e, Integer16BitsColorDepthID.id());
     }
     return color;
 

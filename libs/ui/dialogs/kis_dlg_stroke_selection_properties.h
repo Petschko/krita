@@ -24,8 +24,8 @@
 #include "KisViewManager.h"
 #include "KoStrokeConfigWidget.h"
 #include "ui_wdgstrokeselectionproperties.h"
-#include <kis_painter.h>
 #include <kis_canvas2.h>
+#include <KisToolShapeUtils.h>
 
 class KoColorSpace;
 class KoColorPopupAction;
@@ -52,7 +52,7 @@ struct StrokeSelectionOptions {
     KoColor color;
     KoColor fillColor;
     KoColor customColor;
-    KisPainter::FillStyle fillStyle() const;
+    KisToolShapeUtils::FillStyle fillStyle() const;
     void lock();
 };
 
@@ -65,14 +65,19 @@ public:
     WdgStrokeSelection(QWidget *parent) ;
     StrokeSelectionOptions  m_options;
 
+    bool m_isVectorLayer;
+    KisPropertiesConfigurationSP m_cfg;
+
+    void enableControls();
+
 Q_SIGNALS:
     void colorFillSelectorChanged();
     void colorSelectorChanged();
 
 private Q_SLOTS:
     void on_fillBox_currentIndexChanged(int index);
-    void on_typeBox_currentIndexChanged(const QString &arg1);
-    void on_lineColorBox_currentIndexChanged(const QString &arg1);
+    void on_typeBox_currentIndexChanged(int index);
+    void on_lineColorBox_currentIndexChanged(int index);
 
 };
 
@@ -82,24 +87,23 @@ class KisDlgStrokeSelection : public KoDialog
 
     Q_OBJECT
 
-
 public:
     KisDlgStrokeSelection(KisImageWSP image, KisViewManager *view, bool isVectorLayer);
     ~KisDlgStrokeSelection() override;
+
     int getLineSize() const;
     linePosition getLinePosition() const;
     KoColor getSelectedColor() const;
     bool isBrushSelected() const;
     KoColor getFillSelectedColor() const;
     StrokeSelectionOptions  getParams() const;
-    void lockVectorLayerFunctions();
-    void unlockVectorLayerFunctions();
 
 private:
-    WdgStrokeSelection * m_page;
+    WdgStrokeSelection *m_page {0};
     KisImageWSP m_image;
-    KoCanvasResourceManager *m_resourceManager;
-    KisDisplayColorConverter *converter;
+    KoCanvasResourceProvider *m_resourceManager {0};
+    KisDisplayColorConverter *converter {0};
+    bool m_isVectorLayer {false};
 
 private Q_SLOTS:
     void setColorFillButton();

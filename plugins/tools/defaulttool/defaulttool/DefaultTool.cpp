@@ -43,7 +43,7 @@
 #include <KoPathShape.h>
 #include <KoDrag.h>
 #include <KoCanvasBase.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoShapeRubberSelectStrategy.h>
 #include <commands/KoShapeMoveCommand.h>
 #include <commands/KoShapeTransformCommand.h>
@@ -70,7 +70,7 @@
 #include <QPointer>
 #include <QAction>
 #include <QKeyEvent>
-#include <QSignalMapper>
+#include <KisSignalMapper.h>
 #include <KoResourcePaths.h>
 
 #include <KoCanvasController.h>
@@ -144,7 +144,7 @@ public:
         KoShapeRubberSelectStrategy::paint(painter, converter);
     }
 
-    void finishInteraction(Qt::KeyboardModifiers modifiers) override
+    void finishInteraction(Qt::KeyboardModifiers modifiers = 0) override
     {
         Q_UNUSED(modifiers);
         DefaultTool *defaultTool = dynamic_cast<DefaultTool*>(tool());
@@ -213,9 +213,10 @@ public:
     bool tryUseCustomCursor() override {
         if (m_currentHandle.type != KoShapeGradientHandles::Handle::None) {
             q->useCursor(Qt::OpenHandCursor);
+            return true;
         }
 
-        return m_currentHandle.type != KoShapeGradientHandles::Handle::None;
+        return false;
     }
 
 private:
@@ -288,11 +289,12 @@ private:
     QPointer<KoSelection> m_selection;
 };
 
-DefaultTool::DefaultTool(KoCanvasBase *canvas)
+DefaultTool::DefaultTool(KoCanvasBase *canvas, bool connectToSelectedShapesProxy)
     : KoInteractionTool(canvas)
     , m_lastHandle(KoFlake::NoHandle)
     , m_hotPosition(KoFlake::TopLeft)
     , m_mouseWasInsideHandles(false)
+    , m_decorator(0)
     , m_selectionHandler(new SelectionHandler(this))
     , m_tabbedOptionWidget(0)
 {
@@ -339,7 +341,9 @@ DefaultTool::DefaultTool(KoCanvasBase *canvas)
     m_sizeCursors[6] = Qt::SizeHorCursor;
     m_sizeCursors[7] = Qt::SizeFDiagCursor;
 
-    connect(canvas->selectedShapesProxy(), SIGNAL(selectionChanged()), this, SLOT(updateActions()));
+    if (connectToSelectedShapesProxy) {
+        connect(canvas->selectedShapesProxy(), SIGNAL(selectionChanged()), this, SLOT(updateActions()));
+    }
 }
 
 DefaultTool::~DefaultTool()
@@ -375,88 +379,50 @@ bool DefaultTool::wantsAutoScroll() const
     return true;
 }
 
-void DefaultTool::addMappedAction(QSignalMapper *mapper, const QString &actionId, int commandType)
+void DefaultTool::addMappedAction(KisSignalMapper *mapper, const QString &actionId, int commandType)
 {
-    KisActionRegistry *actionRegistry = KisActionRegistry::instance();
-
-    QAction *action = actionRegistry->makeQAction(actionId, this);
-    addAction(actionId, action);
-    connect(action, SIGNAL(triggered()), mapper, SLOT(map()));
-    mapper->setMapping(action, commandType);
+    QAction *a =action(actionId);
+    connect(a, SIGNAL(triggered()), mapper, SLOT(map()));
+    mapper->setMapping(a, commandType);
 }
 
 void DefaultTool::setupActions()
 {
-    KisActionRegistry *actionRegistry = KisActionRegistry::instance();
+    m_alignSignalsMapper = new KisSignalMapper(this);
 
-    QAction *actionBringToFront = actionRegistry->makeQAction("object_order_front", this);
-    addAction("object_order_front", actionBringToFront);
-    connect(actionBringToFront, SIGNAL(triggered()), this, SLOT(selectionBringToFront()));
+    addMappedAction(m_alignSignalsMapper, "object_align_horizontal_left", KoShapeAlignCommand::HorizontalLeftAlignment);
+    addMappedAction(m_alignSignalsMapper, "object_align_horizontal_center", KoShapeAlignCommand::HorizontalCenterAlignment);
+    addMappedAction(m_alignSignalsMapper, "object_align_horizontal_right", KoShapeAlignCommand::HorizontalRightAlignment);
+    addMappedAction(m_alignSignalsMapper, "object_align_vertical_top", KoShapeAlignCommand::VerticalTopAlignment);
+    addMappedAction(m_alignSignalsMapper, "object_align_vertical_center", KoShapeAlignCommand::VerticalCenterAlignment);
+    addMappedAction(m_alignSignalsMapper, "object_align_vertical_bottom", KoShapeAlignCommand::VerticalBottomAlignment);
 
-    QAction *actionRaise = actionRegistry->makeQAction("object_order_raise", this);
-    addAction("object_order_raise", actionRaise);
-    connect(actionRaise, SIGNAL(triggered()), this, SLOT(selectionMoveUp()));
+    m_distributeSignalsMapper = new KisSignalMapper(this);
 
-    QAction *actionLower = actionRegistry->makeQAction("object_order_lower", this);
-    addAction("object_order_lower", actionLower);
-    connect(actionLower, SIGNAL(triggered()), this, SLOT(selectionMoveDown()));
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_horizontal_left", KoShapeDistributeCommand::HorizontalLeftDistribution);
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_horizontal_center", KoShapeDistributeCommand::HorizontalCenterDistribution);
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_horizontal_right", KoShapeDistributeCommand::HorizontalRightDistribution);
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_horizontal_gaps", KoShapeDistributeCommand::HorizontalGapsDistribution);
 
-    QAction *actionSendToBack = actionRegistry->makeQAction("object_order_back", this);
-    addAction("object_order_back", actionSendToBack);
-    connect(actionSendToBack, SIGNAL(triggered()), this, SLOT(selectionSendToBack()));
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_vertical_top", KoShapeDistributeCommand::VerticalTopDistribution);
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_vertical_center", KoShapeDistributeCommand::VerticalCenterDistribution);
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_vertical_bottom", KoShapeDistributeCommand::VerticalBottomDistribution);
+    addMappedAction(m_distributeSignalsMapper, "object_distribute_vertical_gaps", KoShapeDistributeCommand::VerticalGapsDistribution);
 
+    m_transformSignalsMapper = new KisSignalMapper(this);
 
-    QSignalMapper *alignSignalsMapper = new QSignalMapper(this);
-    connect(alignSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionAlign(int)));
+    addMappedAction(m_transformSignalsMapper, "object_transform_rotate_90_cw", TransformRotate90CW);
+    addMappedAction(m_transformSignalsMapper, "object_transform_rotate_90_ccw", TransformRotate90CCW);
+    addMappedAction(m_transformSignalsMapper, "object_transform_rotate_180", TransformRotate180);
+    addMappedAction(m_transformSignalsMapper, "object_transform_mirror_horizontally", TransformMirrorX);
+    addMappedAction(m_transformSignalsMapper, "object_transform_mirror_vertically", TransformMirrorY);
+    addMappedAction(m_transformSignalsMapper, "object_transform_reset", TransformReset);
 
-    addMappedAction(alignSignalsMapper, "object_align_horizontal_left", KoShapeAlignCommand::HorizontalLeftAlignment);
-    addMappedAction(alignSignalsMapper, "object_align_horizontal_center", KoShapeAlignCommand::HorizontalCenterAlignment);
-    addMappedAction(alignSignalsMapper, "object_align_horizontal_right", KoShapeAlignCommand::HorizontalRightAlignment);
-    addMappedAction(alignSignalsMapper, "object_align_vertical_top", KoShapeAlignCommand::VerticalTopAlignment);
-    addMappedAction(alignSignalsMapper, "object_align_vertical_center", KoShapeAlignCommand::VerticalCenterAlignment);
-    addMappedAction(alignSignalsMapper, "object_align_vertical_bottom", KoShapeAlignCommand::VerticalBottomAlignment);
+    m_booleanSignalsMapper = new KisSignalMapper(this);
 
-    QSignalMapper *distributeSignalsMapper = new QSignalMapper(this);
-    connect(distributeSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionDistribute(int)));
-
-    addMappedAction(distributeSignalsMapper, "object_distribute_horizontal_left", KoShapeDistributeCommand::HorizontalLeftDistribution);
-    addMappedAction(distributeSignalsMapper, "object_distribute_horizontal_center", KoShapeDistributeCommand::HorizontalCenterDistribution);
-    addMappedAction(distributeSignalsMapper, "object_distribute_horizontal_right", KoShapeDistributeCommand::HorizontalRightDistribution);
-    addMappedAction(distributeSignalsMapper, "object_distribute_horizontal_gaps", KoShapeDistributeCommand::HorizontalGapsDistribution);
-
-    addMappedAction(distributeSignalsMapper, "object_distribute_vertical_top", KoShapeDistributeCommand::VerticalTopDistribution);
-    addMappedAction(distributeSignalsMapper, "object_distribute_vertical_center", KoShapeDistributeCommand::VerticalCenterDistribution);
-    addMappedAction(distributeSignalsMapper, "object_distribute_vertical_bottom", KoShapeDistributeCommand::VerticalBottomDistribution);
-    addMappedAction(distributeSignalsMapper, "object_distribute_vertical_gaps", KoShapeDistributeCommand::VerticalGapsDistribution);
-
-    QAction *actionGroupBottom = actionRegistry->makeQAction("object_group", this);
-    addAction("object_group", actionGroupBottom);
-    connect(actionGroupBottom, SIGNAL(triggered()), this, SLOT(selectionGroup()));
-
-    QAction *actionUngroupBottom = actionRegistry->makeQAction("object_ungroup", this);
-    addAction("object_ungroup", actionUngroupBottom);
-    connect(actionUngroupBottom, SIGNAL(triggered()), this, SLOT(selectionUngroup()));
-
-    QSignalMapper *transformSignalsMapper = new QSignalMapper(this);
-    connect(transformSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionTransform(int)));
-
-    addMappedAction(transformSignalsMapper, "object_transform_rotate_90_cw", TransformRotate90CW);
-    addMappedAction(transformSignalsMapper, "object_transform_rotate_90_ccw", TransformRotate90CCW);
-    addMappedAction(transformSignalsMapper, "object_transform_rotate_180", TransformRotate180);
-    addMappedAction(transformSignalsMapper, "object_transform_mirror_horizontally", TransformMirrorX);
-    addMappedAction(transformSignalsMapper, "object_transform_mirror_vertically", TransformMirrorY);
-    addMappedAction(transformSignalsMapper, "object_transform_reset", TransformReset);
-
-    QSignalMapper *booleanSignalsMapper = new QSignalMapper(this);
-    connect(booleanSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionBooleanOp(int)));
-
-    addMappedAction(booleanSignalsMapper, "object_unite", BooleanUnion);
-    addMappedAction(booleanSignalsMapper, "object_intersect", BooleanIntersection);
-    addMappedAction(booleanSignalsMapper, "object_subtract", BooleanSubtraction);
-
-    QAction *actionSplit = actionRegistry->makeQAction("object_split", this);
-    addAction("object_split", actionSplit);
-    connect(actionSplit, SIGNAL(triggered()), this, SLOT(selectionSplitShapes()));
+    addMappedAction(m_booleanSignalsMapper, "object_unite", BooleanUnion);
+    addMappedAction(m_booleanSignalsMapper, "object_intersect", BooleanIntersection);
+    addMappedAction(m_booleanSignalsMapper, "object_subtract", BooleanSubtraction);
 
     m_contextMenu.reset(new QMenu());
 }
@@ -569,8 +535,8 @@ qreal DefaultTool::rotationOfHandle(KoFlake::SelectionHandle handle, bool useEdg
     case KoFlake::TopLeftHandle:
         rotation -= 225.0;
         break;
-    case KoFlake::NoHandle:
-        break;
+    default:
+        ;
     }
 
     if (rotation < 0.0) {
@@ -641,6 +607,8 @@ void DefaultTool::updateCursor()
             if (shearHandle) {
                 statusText = i18n("Click and drag to shear selection.");
             }
+
+
         } else {
             statusText = i18n("Click and drag to resize selection.");
             m_angle = rotationOfHandle(m_lastHandle, false);
@@ -700,26 +668,42 @@ void DefaultTool::paint(QPainter &painter, const KoViewConverter &converter)
 {
     KoSelection *selection = koSelection();
     if (selection) {
-        SelectionDecorator decorator(canvas()->resourceManager());
-        decorator.setSelection(selection);
-        decorator.setHandleRadius(handleRadius());
-        decorator.setShowFillGradientHandles(hasInteractioFactory(EditFillGradientFactoryId));
-        decorator.setShowStrokeFillGradientHandles(hasInteractioFactory(EditStrokeGradientFactoryId));
-        decorator.paint(painter, converter);
+        this->m_decorator = new SelectionDecorator(canvas()->resourceManager());
+
+        {
+            /**
+             * Selection masks don't render the outline of the shapes, so we should
+             * do that explicitly when rendering them via selection
+             */
+
+            KisCanvas2 *kisCanvas = static_cast<KisCanvas2 *>(canvas());
+            KisNodeSP node = kisCanvas->viewManager()->nodeManager()->activeNode();
+            const bool isSelectionMask = node && node->inherits("KisSelectionMask");
+            m_decorator->setForceShapeOutlines(isSelectionMask);
+        }
+
+        m_decorator->setSelection(selection);
+        m_decorator->setHandleRadius(handleRadius());
+        m_decorator->setShowFillGradientHandles(hasInteractioFactory(EditFillGradientFactoryId));
+        m_decorator->setShowStrokeFillGradientHandles(hasInteractioFactory(EditStrokeGradientFactoryId));
+        m_decorator->paint(painter, converter);
     }
 
     KoInteractionTool::paint(painter, converter);
 
     painter.save();
-    KoShape::applyConversion(painter, converter);
+    painter.setTransform(converter.documentToView(), true);
     canvas()->snapGuide()->paint(painter, converter);
     painter.restore();
 }
 
 bool DefaultTool::isValidForCurrentLayer() const
 {
-    KisNodeSP currentNode = canvas()->resourceManager()->resource(KisCanvasResourceProvider::CurrentKritaNode).value<KisNodeWSP>();
-    return !currentNode.isNull() && currentNode->inherits("KisShapeLayer");
+    // if the currently active node has a shape manager, then it is
+    // probably our client :)
+
+    KisCanvas2 *kisCanvas = static_cast<KisCanvas2 *>(canvas());
+    return bool(kisCanvas->localShapeManager());
 }
 
 KoShapeManager *DefaultTool::shapeManager() const {
@@ -768,6 +752,7 @@ void DefaultTool::mouseMoveEvent(KoPointerEvent *event)
         // there used to be guides... :'''(
     }
 
+
     updateCursor();
 }
 
@@ -794,6 +779,9 @@ void DefaultTool::mouseReleaseEvent(KoPointerEvent *event)
 {
     KoInteractionTool::mouseReleaseEvent(event);
     updateCursor();
+
+    // This makes sure the decorations that are shown are refreshed. especally the "T" icon
+    canvas()->updateCanvas(QRectF(0,0,canvas()->canvasWidget()->width(), canvas()->canvasWidget()->height()));
 }
 
 void DefaultTool::mouseDoubleClickEvent(KoPointerEvent *event)
@@ -979,7 +967,7 @@ void DefaultTool::recalcSelectionBox(KoSelection *selection)
 {
     KIS_ASSERT_RECOVER_RETURN(selection->count());
 
-    QTransform matrix = selection->absoluteTransformation(0);
+    QTransform matrix = selection->absoluteTransformation();
     m_selectionOutline = matrix.map(QPolygonF(selection->outlineRect()));
     m_angle = 0.0;
 
@@ -1014,6 +1002,32 @@ void DefaultTool::activate(ToolActivation activation, const QSet<KoShape *> &sha
 {
     KoToolBase::activate(activation, shapes);
 
+    QAction *actionBringToFront = action("object_order_front");
+    connect(actionBringToFront, SIGNAL(triggered()), this, SLOT(selectionBringToFront()), Qt::UniqueConnection);
+
+    QAction *actionRaise = action("object_order_raise");
+    connect(actionRaise, SIGNAL(triggered()), this, SLOT(selectionMoveUp()), Qt::UniqueConnection);
+
+    QAction *actionLower = action("object_order_lower");
+    connect(actionLower, SIGNAL(triggered()), this, SLOT(selectionMoveDown()));
+
+    QAction *actionSendToBack = action("object_order_back");
+    connect(actionSendToBack, SIGNAL(triggered()), this, SLOT(selectionSendToBack()), Qt::UniqueConnection);
+
+    QAction *actionGroupBottom = action("object_group");
+    connect(actionGroupBottom, SIGNAL(triggered()), this, SLOT(selectionGroup()), Qt::UniqueConnection);
+
+    QAction *actionUngroupBottom = action("object_ungroup");
+    connect(actionUngroupBottom, SIGNAL(triggered()), this, SLOT(selectionUngroup()), Qt::UniqueConnection);
+
+    QAction *actionSplit = action("object_split");
+    connect(actionSplit, SIGNAL(triggered()), this, SLOT(selectionSplitShapes()), Qt::UniqueConnection);
+
+    connect(m_alignSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionAlign(int)));
+    connect(m_distributeSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionDistribute(int)));
+    connect(m_transformSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionTransform(int)));
+    connect(m_booleanSignalsMapper, SIGNAL(mapped(int)), SLOT(selectionBooleanOp(int)));
+
     m_mouseWasInsideHandles = false;
     m_lastHandle = KoFlake::NoHandle;
     useCursor(Qt::ArrowCursor);
@@ -1028,6 +1042,33 @@ void DefaultTool::activate(ToolActivation activation, const QSet<KoShape *> &sha
 void DefaultTool::deactivate()
 {
     KoToolBase::deactivate();
+
+    QAction *actionBringToFront = action("object_order_front");
+    disconnect(actionBringToFront, 0, this, 0);
+
+    QAction *actionRaise = action("object_order_raise");
+    disconnect(actionRaise, 0, this, 0);
+
+    QAction *actionLower = action("object_order_lower");
+    disconnect(actionLower, 0, this, 0);
+
+    QAction *actionSendToBack = action("object_order_back");
+    disconnect(actionSendToBack, 0, this, 0);
+
+    QAction *actionGroupBottom = action("object_group");
+    disconnect(actionGroupBottom, 0, this, 0);
+
+    QAction *actionUngroupBottom = action("object_ungroup");
+    disconnect(actionUngroupBottom, 0, this, 0);
+
+    QAction *actionSplit = action("object_split");
+    disconnect(actionSplit, 0, this, 0);
+
+    disconnect(m_alignSignalsMapper, 0, this, 0);
+    disconnect(m_distributeSignalsMapper, 0, this, 0);
+    disconnect(m_transformSignalsMapper, 0, this, 0);
+    disconnect(m_booleanSignalsMapper, 0, this, 0);
+
 
     if (m_tabbedOptionWidget) {
         m_tabbedOptionWidget->deactivate();
@@ -1144,7 +1185,7 @@ void DefaultTool::selectionTransform(int transformAction)
     const QTransform centerTrans = QTransform::fromTranslate(centerPoint.x(), centerPoint.y());
     const QTransform centerTransInv = QTransform::fromTranslate(-centerPoint.x(), -centerPoint.y());
 
-    // we also add selection to the list of trasformed shapes, so that its outline is updated correctly
+    // we also add selection to the list of transformed shapes, so that its outline is updated correctly
     QList<KoShape*> transformedShapes = editableShapes;
     transformedShapes << selection;
 
@@ -1154,7 +1195,7 @@ void DefaultTool::selectionTransform(int transformAction)
         QTransform t;
 
         if (!shouldReset) {
-            const QTransform world = shape->absoluteTransformation(0);
+            const QTransform world = shape->absoluteTransformation();
             t =  world * centerTransInv * applyTransform * centerTrans * world.inverted() * shape->transformation();
         } else {
             const QPointF center = shape->outlineRect().center();
@@ -1189,7 +1230,7 @@ void DefaultTool::selectionBooleanOp(int booleanOp)
     KoShape *referenceShape = editableShapes[referenceShapeIndex];
 
     Q_FOREACH (KoShape *shape, editableShapes) {
-        srcOutlines << shape->absoluteTransformation(0).map(shape->outline());
+        srcOutlines << shape->absoluteTransformation().map(shape->outline());
     }
 
     if (booleanOp == BooleanUnion) {
@@ -1308,10 +1349,10 @@ void DefaultTool::selectionAlign(int _align)
 
     // single selected shape is automatically aligned to document rect
     if (editableShapes.count() == 1) {
-        if (!canvas()->resourceManager()->hasResource(KoCanvasResourceManager::PageSize)) {
+        if (!canvas()->resourceManager()->hasResource(KoCanvasResourceProvider::PageSize)) {
             return;
         }
-        bb = QRectF(QPointF(0, 0), canvas()->resourceManager()->sizeResource(KoCanvasResourceManager::PageSize));
+        bb = QRectF(QPointF(0, 0), canvas()->resourceManager()->sizeResource(KoCanvasResourceProvider::PageSize));
     } else {
         bb = KoShape::absoluteOutlineRect(editableShapes);
     }
@@ -1494,7 +1535,8 @@ KoInteractionStrategy *DefaultTool::createStrategy(KoPointerEvent *event)
         }
 
         if (!selectMultiple && !selectNextInStack) {
-            if (insideSelection) {
+
+           if (insideSelection) {
                 return new ShapeMoveStrategy(this, selection, event->point);
             }
         }
@@ -1558,7 +1600,7 @@ void DefaultTool::updateActions()
     const bool alignmentEnabled =
        multipleSelected ||
        (!editableShapes.isEmpty() &&
-        canvas()->resourceManager()->hasResource(KoCanvasResourceManager::PageSize));
+        canvas()->resourceManager()->hasResource(KoCanvasResourceProvider::PageSize));
 
     action("object_align_horizontal_left")->setEnabled(alignmentEnabled);
     action("object_align_horizontal_center")->setEnabled(alignmentEnabled);
@@ -1625,28 +1667,11 @@ QMenu* DefaultTool::popupActionsMenu()
     if (m_contextMenu) {
         m_contextMenu->clear();
 
-        KActionCollection *collection = this->canvas()->canvasController()->actionCollection();
-
-        m_contextMenu->addAction(collection->action("edit_cut"));
-        m_contextMenu->addAction(collection->action("edit_copy"));
-        m_contextMenu->addAction(collection->action("edit_paste"));
-
-        m_contextMenu->addSeparator();
-
-        m_contextMenu->addAction(action("object_order_front"));
-        m_contextMenu->addAction(action("object_order_raise"));
-        m_contextMenu->addAction(action("object_order_lower"));
-        m_contextMenu->addAction(action("object_order_back"));
-
-        if (action("object_group")->isEnabled() || action("object_ungroup")->isEnabled()) {
-            m_contextMenu->addSeparator();
-            m_contextMenu->addAction(action("object_group"));
-            m_contextMenu->addAction(action("object_ungroup"));
-        }
-
+        m_contextMenu->addSection(i18n("Vector Shape Actions"));
         m_contextMenu->addSeparator();
 
         QMenu *transform = m_contextMenu->addMenu(i18n("Transform"));
+
         transform->addAction(action("object_transform_rotate_90_cw"));
         transform->addAction(action("object_transform_rotate_90_ccw"));
         transform->addAction(action("object_transform_rotate_180"));
@@ -1667,6 +1692,27 @@ QMenu* DefaultTool::popupActionsMenu()
             transform->addAction(action("object_subtract"));
             transform->addAction(action("object_split"));
         }
+
+        m_contextMenu->addSeparator();
+
+        m_contextMenu->addAction(action("edit_cut"));
+        m_contextMenu->addAction(action("edit_copy"));
+        m_contextMenu->addAction(action("edit_paste"));
+
+        m_contextMenu->addSeparator();
+
+        m_contextMenu->addAction(action("object_order_front"));
+        m_contextMenu->addAction(action("object_order_raise"));
+        m_contextMenu->addAction(action("object_order_lower"));
+        m_contextMenu->addAction(action("object_order_back"));
+
+        if (action("object_group")->isEnabled() || action("object_ungroup")->isEnabled()) {
+            m_contextMenu->addSeparator();
+            m_contextMenu->addAction(action("object_group"));
+            m_contextMenu->addAction(action("object_ungroup"));
+        }
+
+
     }
 
     return m_contextMenu.data();

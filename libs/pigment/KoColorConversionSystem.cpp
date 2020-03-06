@@ -97,7 +97,10 @@ void KoColorConversionSystem::insertColorSpace(const KoColorSpaceFactory* csf)
                 } else {
                     engineNode = insertEngine(engine);
                 }
-                connectToEngine(n, engineNode);
+
+                if (engine->supportsColorSpace(modelId, depthId, profile)) {
+                    connectToEngine(n, engineNode);
+                }
             }
         }
     }
@@ -138,7 +141,10 @@ void KoColorConversionSystem::insertColorProfile(const KoColorProfile* _profile)
             Q_ASSERT(engine);
             Node* engineNode = d->graph[ NodeKey(engine->id(), engine->id(), engine->id())];
             Q_ASSERT(engineNode);
-            connectToEngine(n, engineNode);
+
+            if (engine->supportsColorSpace(modelId, depthId, _profile)) {
+                connectToEngine(n, engineNode);
+            }
         }
         const QList<KoColorConversionTransformationFactory*> cctfs = factory->colorConversionLinks();
         Q_FOREACH (KoColorConversionTransformationFactory* cctf, cctfs) {
@@ -427,7 +433,7 @@ inline KoColorConversionSystem::Path KoColorConversionSystem::findBestPathImpl2(
                 p.isGood = true;
                 return p;
             } else {
-                Q_ASSERT(!node2path.contains(endNode));   // That would be a total fuck up if there are two vertices between two nodes
+                //Q_ASSERT(!node2path.contains(endNode));   // That would be a total fuck up if there are two vertices between two nodes
                 node2path.insert(endNode, p);
                 possiblePaths.append(p);
             }

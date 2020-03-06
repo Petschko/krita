@@ -40,7 +40,6 @@
 #include <KoDockRegistry.h>
 
 #include <kis_icon.h>
-#include <kis_icon.h>
 #include <brushengine/kis_paintop_preset.h>
 #include <brushengine/kis_paintop_config_widget.h>
 #include <kis_canvas_resource_provider.h>
@@ -137,7 +136,7 @@ KisPaintOpPresetsPopup::KisPaintOpPresetsPopup(KisCanvasResourceProvider * resou
     QMenu* menu = new QMenu(this);
 
     menu->setStyleSheet("margin: 6px");
-    menu->addSection(i18n("Display"));
+    menu->addSection(i18nc("@title Which elements to display (e.g., thumbnails or details)", "Display"));
 
     QActionGroup *actionGroup = new QActionGroup(this);
 
@@ -289,7 +288,7 @@ KisPaintOpPresetsPopup::KisPaintOpPresetsPopup(KisCanvasResourceProvider * resou
 
     connect(resourceProvider->resourceManager(),
             SIGNAL(canvasResourceChanged(int,QVariant)),
-            SLOT(slotResourceChanged(int, QVariant)));
+            SLOT(slotResourceChanged(int,QVariant)));
 
     connect(m_d->uiWdgPaintOpPresetSettings.wdgLodAvailability,
             SIGNAL(sigUserChangedLodAvailability(bool)),
@@ -397,7 +396,7 @@ void KisPaintOpPresetsPopup::slotSaveRenameCurrentBrush()
     newPreset->setFilename(renamedPresetPathAndFile); // this also contains the path
     newPreset->setName(renamedPresetName);
     newPreset->setImage(curPreset->image()); // use existing thumbnail (might not need to do this)
-    newPreset->setPresetDirty(false);
+    newPreset->setDirty(false);
     newPreset->setValid(true);
     rServer->addResource(newPreset);
 
@@ -833,7 +832,7 @@ void KisPaintOpPresetsPopup::slotUpdatePresetSettings()
         m_d->uiWdgPaintOpPresetSettings.saveBrushPresetButton->setVisible(false);
         m_d->uiWdgPaintOpPresetSettings.renameBrushPresetButton->setVisible(false);
     } else {
-        bool isPresetDirty = m_d->resourceProvider->currentPreset()->isPresetDirty();
+        bool isPresetDirty = m_d->resourceProvider->currentPreset()->isDirty();
 
         // don't need to reload or overwrite a clean preset
         m_d->uiWdgPaintOpPresetSettings.dirtyPresetIndicatorButton->setVisible(isPresetDirty);
@@ -846,6 +845,6 @@ void KisPaintOpPresetsPopup::slotUpdatePresetSettings()
     // don't update the live preview if the widget is not visible.
     if (m_d->uiWdgPaintOpPresetSettings.liveBrushPreviewView->isVisible()) {
         m_d->uiWdgPaintOpPresetSettings.liveBrushPreviewView->setCurrentPreset(m_d->resourceProvider->currentPreset());
-        m_d->uiWdgPaintOpPresetSettings.liveBrushPreviewView->updateStroke();
+        m_d->uiWdgPaintOpPresetSettings.liveBrushPreviewView->requestUpdateStroke();
     }
 }

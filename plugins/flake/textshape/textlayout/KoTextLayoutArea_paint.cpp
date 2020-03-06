@@ -297,7 +297,7 @@ void KoTextLayoutArea::paint(QPainter *painter, const KoTextDocumentLayout::Pain
                         QBrush frontBrush;
                         frontBrush.setStyle(Qt::SolidPattern);
                         // use the same luma calculation and threshold as msoffice
-                        // see http://social.msdn.microsoft.com/Forums/en-US/os_binaryfile/thread/a02a9a24-efb6-4ba0-a187-0e3d2704882b
+                        // see https://social.msdn.microsoft.com/Forums/en-US/os_binaryfile/thread/a02a9a24-efb6-4ba0-a187-0e3d2704882b
                         int luma = ((5036060/2) * backbrush.color().red()
                                     + (9886846/2) * backbrush.color().green()
                                     + (1920103/2) * backbrush.color().blue()) >> 23;
@@ -507,7 +507,7 @@ void KoTextLayoutArea::decorateListLabel(QPainter *painter, const KoTextBlockDat
 /**
  * Draw a line. Typically meant to underline text or similar.
  * @param painter the painter to paint on.
- * @painter color the pen color to for the decoratoin line
+ * @param color the pen color to for the decoration line
  * @param type The type
  * @param style the type of line to draw.
  * @param width The thickness of the line, in pixels (the painter will be prescaled to points coordinate system).

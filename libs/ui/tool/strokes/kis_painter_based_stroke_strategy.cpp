@@ -36,7 +36,7 @@
 #include "kis_paintop_preset.h"
 #include "kis_paintop_settings.h"
 
-KisPainterBasedStrokeStrategy::KisPainterBasedStrokeStrategy(const QString &id,
+KisPainterBasedStrokeStrategy::KisPainterBasedStrokeStrategy(const QLatin1String &id,
                                                              const KUndo2MagicString &name,
                                                              KisResourcesSnapshotSP resources,
                                                              QVector<KisFreehandStrokeInfo*> strokeInfos,bool useMergeID)
@@ -51,7 +51,7 @@ KisPainterBasedStrokeStrategy::KisPainterBasedStrokeStrategy(const QString &id,
     init();
 }
 
-KisPainterBasedStrokeStrategy::KisPainterBasedStrokeStrategy(const QString &id,
+KisPainterBasedStrokeStrategy::KisPainterBasedStrokeStrategy(const QLatin1String &id,
                                                              const KUndo2MagicString &name,
                                                              KisResourcesSnapshotSP resources,
                                                              KisFreehandStrokeInfo *strokeInfo,bool useMergeID)
@@ -233,8 +233,7 @@ void KisPainterBasedStrokeStrategy::initStrokeCallback()
     bool hasIndirectPainting = supportsIndirectPainting() && m_resources->needsIndirectPainting();
     const QString indirectCompositeOp = m_resources->indirectPaintingCompositeOp();
 
-
-    KisSelectionSP selection = m_resources->activeSelection();
+    KisSelectionSP selection =  m_resources->activeSelection();
 
     if (hasIndirectPainting) {
         KisIndirectPaintingSupport *indirect =
@@ -257,13 +256,12 @@ void KisPainterBasedStrokeStrategy::initStrokeCallback()
             hasIndirectPainting = false;
         }
     }
-    if(m_useMergeID){
-        m_transaction = new KisTransaction(name(), targetDevice,0,timedID(this->id()));
+    if (m_useMergeID) {
+        m_transaction = new KisTransaction(name(), targetDevice, 0, timedID(this->id()));
     }
-    else{
+    else {
         m_transaction = new KisTransaction(name(), targetDevice);
     }
-
 
     // WARNING: masked brush cannot work without indirect painting mode!
     KIS_SAFE_ASSERT_RECOVER_NOOP(!(supportsMaskingBrush() &&
@@ -354,7 +352,7 @@ void KisPainterBasedStrokeStrategy::cancelStrokeCallback()
             delete m_transaction;
             deletePainters();
 
-            QRegion region = t->region();
+            KisRegion region = t->region();
             indirect->setTemporaryTarget(0);
             node->setDirty(region);
             revert = false;

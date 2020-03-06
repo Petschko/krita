@@ -119,7 +119,7 @@ private:
      per view, because this is a class with scrollbars and a zoomlevel and so on)
    - for every pointing device (determined by the unique id of tablet,
      or 0 for mice -- you may have more than one mouse attached, but
-     Qt cannot distinquish between them, there is an associated tool.
+     Qt cannot distinguish between them, there is an associated tool.
    - depending on things like tablet leave/enter proximity, incoming
      mouse or tablet events and a little timer (that gets stopped when
      we know what is what), the active pointing device is determined,
@@ -184,18 +184,10 @@ public:
     KoCanvasController *activeCanvasController() const;
 
     /**
-     * Return the tool that is able to create shapes for this param canvas.
-     * This is typically used by the KoShapeSelector to set which shape to create next.
-     * @param canvas the canvas that is a child of a previously registered controller
-     *    who's tool you want.
-     * @see addController()
-     */
-    KoCreateShapesTool *shapeCreatorTool(KoCanvasBase *canvas) const;
-
-    /**
      * Returns the tool for the given tool id. The tool may be 0
      * @param canvas the canvas that is a child of a previously registered controller
      *    who's tool you want.
+     * @param id the tool identifier
      * @see addController()
      */
     KoToolBase *toolById(KoCanvasBase *canvas, const QString &id) const;
@@ -215,9 +207,6 @@ public:
      * @returns lists of toolActions for the current tools.
      */
     QList<KoToolAction*> toolActionList() const;
-
-    /// Update the internal shortcuts of each tool. (Activation shortcuts are exposed already.)
-    void updateToolShortcuts();
 
     /// Request tool activation for the given canvas controller
     void requestToolActivation(KoCanvasController *controller);
@@ -279,7 +268,6 @@ Q_SIGNALS:
     /**
      * Emitted after the selection changed to state which unique shape-types are now
      * in the selection.
-     * @param canvas the currently active canvas.
      * @param types a list of string that are the shape types of the selected objects.
      */
     void toolCodesSelected(const QList<QString> &types);

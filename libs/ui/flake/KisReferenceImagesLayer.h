@@ -24,6 +24,8 @@
 
 #include <kis_types.h>
 
+class KisDocument;
+
 class KRITAUI_EXPORT KisReferenceImagesLayer : public KisShapeLayer
 {
     Q_OBJECT
@@ -50,6 +52,14 @@ public:
         return new KisReferenceImagesLayer(*this);
     }
 
+    bool isFakeNode() const override;
+
+    KUndo2Command* setProfile(const KoColorProfile *profile) override;
+    KUndo2Command* convertTo(const KoColorSpace * dstColorSpace,
+                                 KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
+                                 KoColorConversionTransformation::ConversionFlags conversionFlags = KoColorConversionTransformation::internalConversionFlags()) override;
+
+
 Q_SIGNALS:
     /**
      * The content of the layer has changed, and the canvas decoration
@@ -63,6 +73,8 @@ private:
     friend struct RemoveReferenceImagesCommand;
     friend class ReferenceImagesCanvas;
 };
+
+typedef KisSharedPtr<KisReferenceImagesLayer> KisReferenceImagesLayerSP;
 
 
 #endif //KRITA_KISREFERENCEIMAGESLAYER_H

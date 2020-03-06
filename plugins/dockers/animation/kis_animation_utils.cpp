@@ -33,21 +33,14 @@
 
 
 namespace KisAnimationUtils {
-    const QString addFrameActionName = i18n("New Frame");
-    const QString duplicateFrameActionName = i18n("Copy Frame");
-    const QString removeFrameActionName = i18n("Remove Frame");
-    const QString removeFramesActionName = i18n("Remove Frames");
     const QString lazyFrameCreationActionName = i18n("Auto Frame Mode");
     const QString dropFramesActionName = i18n("Drop Frames");
-    const QString showLayerActionName = i18n("Show in Timeline");
 
     const QString newLayerActionName = i18n("New Layer");
     const QString addExistingLayerActionName = i18n("Add Existing Layer");
     const QString removeLayerActionName = i18n("Remove Layer");
 
-    const QString addOpacityKeyframeActionName = i18n("Add opacity keyframe");
     const QString addTransformKeyframeActionName = i18n("Add transform keyframe");
-    const QString removeOpacityKeyframeActionName = i18n("Remove opacity keyframe");
     const QString removeTransformKeyframeActionName = i18n("Remove transform keyframe");
 
     KUndo2Command* createKeyframeCommand(KisImageSP image, KisNodeSP node, const QString &channelId, int time, bool copy, KUndo2Command *parentCommand) {
@@ -62,6 +55,7 @@ namespace KisAnimationUtils {
                 QScopedPointer<KUndo2Command> cmd(new KUndo2Command());
 
                 KisKeyframeChannel *channel = node->getKeyframeChannel(channelId);
+                quint8 originalOpacity = node->opacity();
                 bool createdChannel = false;
 
                 if (!channel) {
@@ -85,9 +79,14 @@ namespace KisAnimationUtils {
                             //shortcut: clearing the image instead
                             KisPaintDeviceSP device = node->paintDevice();
                             if (device) {
+                                const QRect dirtyRect = device->extent();
+
                                 KisTransaction transaction(kundo2_i18n("Clear"), device, cmd.data());
                                 device->clear();
                                 (void) transaction.endAndTake(); // saved as 'parent'
+
+                                node->setDirty(dirtyRect);
+
                                 result = true;
                             }
                         }
@@ -97,15 +96,23 @@ namespace KisAnimationUtils {
                     }
                 }
 
+                // when a new opacity keyframe is created, the opacity is set to 0
+                // this makes sure to use the opacity that was previously used
+                // maybe there is a better way to do this
+                node->setOpacity(originalOpacity);
+
                 return result ? new KisCommandUtils::SkipFirstRedoWrapper(cmd.take()) : nullptr;
         });
 
         return cmd;
     }
 
-    void createKeyframeLazy(KisImageSP image, KisNodeSP node, const QString &channelId, int time, bool copy) {
+    void createKeyframeLazy(KisImageSP image, KisNodeSP node, const QString &channelId, int time, bool copy)
+    {
         KUndo2Command *cmd = createKeyframeCommand(image, node, channelId, time, copy);
-        KisProcessingApplicator::runSingleCommandStroke(image, cmd, KisStrokeJobData::BARRIER);
+        KisProcessingApplicator::runSingleCommandStroke(image, cmd,
+                                                        KisStrokeJobData::BARRIER,
+                                                        KisStrokeJobData::EXCLUSIVE);
     }
 
     void removeKeyframes(KisImageSP image, const FrameItemList &frames) {
@@ -141,7 +148,9 @@ namespace KisAnimationUtils {
                 return result ? new KisCommandUtils::SkipFirstRedoWrapper(cmd.take()) : 0;
         });
 
-        KisProcessingApplicator::runSingleCommandStroke(image, cmd, KisStrokeJobData::BARRIER);
+        KisProcessingApplicator::runSingleCommandStroke(image, cmd,
+                                                        KisStrokeJobData::BARRIER,
+                                                        KisStrokeJobData::EXCLUSIVE);
     }
 
     void removeKeyframe(KisImageSP image, KisNodeSP node, const QString &channel, int time) {

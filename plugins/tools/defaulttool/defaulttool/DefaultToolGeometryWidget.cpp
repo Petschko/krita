@@ -25,7 +25,7 @@
 
 #include <KoInteractionTool.h>
 #include <KoCanvasBase.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoSelectedShapesProxy.h>
 #include <KoSelection.h>
 #include <KoUnit.h>
@@ -105,7 +105,7 @@ DefaultToolGeometryWidget::DefaultToolGeometryWidget(KoInteractionTool *tool, QW
 
 
     // Connect and initialize anchor point resource
-    KoCanvasResourceManager *resourceManager = m_tool->canvas()->resourceManager();
+    KoCanvasResourceProvider *resourceManager = m_tool->canvas()->resourceManager();
     connect(resourceManager,
             SIGNAL(canvasResourceChanged(int,QVariant)),
             SLOT(resourceChanged(int,QVariant)));
@@ -164,7 +164,7 @@ QRectF calculateSelectionBounds(KoSelection *selection,
     tryAnchorPosition(anchor, resultRect, &resultPoint);
 
     if (useGlobalSize) {
-        resultRect = shape->absoluteTransformation(0).mapRect(resultRect);
+        resultRect = shape->absoluteTransformation().mapRect(resultRect);
     } else {
         /**
          * Some shapes, e.g. KoSelection and KoShapeGroup don't have real size() and
@@ -176,7 +176,7 @@ QRectF calculateSelectionBounds(KoSelection *selection,
         resultRect = matrix.scaleTransform().mapRect(resultRect);
     }
 
-    resultPoint = shape->absoluteTransformation(0).map(resultPoint);
+    resultPoint = shape->absoluteTransformation().map(resultPoint);
 
     if (outShapes) {
         *outShapes = shapes;
@@ -455,7 +455,7 @@ void DefaultToolGeometryWidget::showEvent(QShowEvent *event)
 
 void DefaultToolGeometryWidget::resourceChanged(int key, const QVariant &res)
 {
-    if (key == KoCanvasResourceManager::Unit) {
+    if (key == KoCanvasResourceProvider::Unit) {
         setUnit(res.value<KoUnit>());
     } else if (key == DefaultTool::HotPosition) {
         positionSelector->setValue(KoFlake::AnchorPosition(res.toInt()));

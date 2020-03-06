@@ -46,7 +46,7 @@
 
 
 #include "tool_transform_args.h"
-#include "tool_transform_changes_tracker.h"
+#include "KisToolChangesTracker.h"
 #include "kis_tool_transform_config_widget.h"
 #include "transform_transaction_properties.h"
 
@@ -135,7 +135,7 @@ public:
      * the tool. See bug 362659
      * @return false
      */
-    bool wantsAutoScroll() const {
+    bool wantsAutoScroll() const override {
         return false;
     }
 
@@ -148,7 +148,6 @@ public:
     void continueActionImpl(KoPointerEvent *event, bool usePrimaryAction, KisTool::AlternateAction action);
     void endActionImpl(KoPointerEvent *event, bool usePrimaryAction, KisTool::AlternateAction action);
     QMenu* popupActionsMenu() override;
-
 
     void activatePrimaryAction() override;
     void deactivatePrimaryAction() override;
@@ -233,9 +232,6 @@ private:
     QList<KisNodeSP> fetchNodesList(ToolTransformArgs::TransformMode mode, KisNodeSP root, bool recursive);
     QScopedPointer<QMenu> m_contextMenu;
 
-    bool clearDevices(const QList<KisNodeSP> &nodes);
-    void transformClearedDevices();
-
     void startStroke(ToolTransformArgs::TransformMode mode, bool forceReset);
     void endStroke();
     void cancelStroke();
@@ -249,17 +245,11 @@ private:
 
     void commitChanges();
 
-
-    bool tryInitTransformModeFromNode(KisNodeSP node);
-    bool tryFetchArgsFromCommandAndUndo(ToolTransformArgs *args, ToolTransformArgs::TransformMode mode, KisNodeSP currentNode);
     void initTransformMode(ToolTransformArgs::TransformMode mode);
     void initGuiAfterTransformMode();
 
     void initThumbnailImage(KisPaintDeviceSP previewDevice);
-    void updateSelectionPath();
     void updateApplyResetAvailability();
-
-    void forceRepaintDelayedLayers(KisNodeSP root);
 
 private:
     ToolTransformArgs m_currentArgs;
@@ -267,25 +257,8 @@ private:
     bool m_actuallyMoveWhileSelected; // true <=> selection has been moved while clicked
 
     KisPaintDeviceSP m_selectedPortionCache;
-
-    struct StrokeData {
-        StrokeData() {}
-        StrokeData(KisStrokeId strokeId) : m_strokeId(strokeId) {}
-
-        void clear() {
-            m_strokeId.clear();
-            m_clearedNodes.clear();
-        }
-
-        const KisStrokeId strokeId() const { return m_strokeId; }
-        void addClearedNode(KisNodeSP node) { m_clearedNodes.append(node); }
-        const QVector<KisNodeWSP>& clearedNodes() const { return m_clearedNodes; }
-
-    private:
-        KisStrokeId m_strokeId;
-        QVector<KisNodeWSP> m_clearedNodes;
-    };
-    StrokeData m_strokeData;
+    KisStrokeId m_strokeId;
+    void *m_strokeStrategyCookie = 0;
 
     bool m_workRecursively;
 
@@ -295,7 +268,7 @@ private:
     QPointer<KisCanvas2> m_canvas;
 
     TransformTransactionProperties m_transaction;
-    TransformChangesTracker m_changesTracker;
+    KisToolChangesTracker m_changesTracker;
 
 
     /// actions for the context click menu
@@ -333,13 +306,15 @@ private:
     QPainterPath m_cursorOutline;
 
 private Q_SLOTS:
-    void slotTrackerChangedConfig();
+    void slotTrackerChangedConfig(KisToolChangesTrackerDataSP status);
     void slotUiChangedConfig();
     void slotApplyTransform();
     void slotResetTransform();
     void slotRestartTransform();
     void slotEditingFinished();
 
+    void slotTransactionGenerated(TransformTransactionProperties transaction, ToolTransformArgs args, void *strokeStrategyCookie);
+    void slotPreviewDeviceGenerated(KisPaintDeviceSP device);
 
     // context menu options for updating the transform type
     // this is to help with discoverability since come people can't find the tool options

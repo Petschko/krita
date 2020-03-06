@@ -23,7 +23,7 @@
 
 #include <KoColor.h>
 #include <KoID.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 
 #include "kis_types.h"
 #include "kritaui_export.h"
@@ -36,6 +36,7 @@ class KoResource;
 class KoCanvasBase;
 class KisViewManager;
 class KoPattern;
+class KoGamutMask;
 class KisFilterConfiguration;
 
 #include <kis_abstract_perspective_grid.h>
@@ -51,8 +52,10 @@ class KRITAUI_EXPORT KisCanvasResourceProvider : public QObject
 public:
 
     enum Resources {
-        HdrExposure = KoCanvasResourceManager::KritaStart + 1,
+        HdrExposure = KoCanvasResourceProvider::KritaStart + 1,
         CurrentPattern,
+        CurrentGamutMask,
+        GamutMaskActive,
         CurrentGradient,
         CurrentDisplayProfile,
         CurrentKritaNode,
@@ -78,17 +81,15 @@ public:
         GlobalAlphaLock,
         DisablePressure,
         PreviousPaintOpPreset,
-        EffectiveZoom, ///<-Used only by painting tools for non-displaying purposes
-        SelectionAction,
-        SelectionMode
+        EffectiveZoom ///<-Used only by painting tools for non-displaying purposes
     };
 
 
     KisCanvasResourceProvider(KisViewManager * view);
     ~KisCanvasResourceProvider() override;
 
-    void setResourceManager(KoCanvasResourceManager *resourceManager);
-    KoCanvasResourceManager* resourceManager();
+    void setResourceManager(KoCanvasResourceProvider *resourceManager);
+    KoCanvasResourceProvider* resourceManager();
 
     KoCanvasBase * canvas() const;
 
@@ -114,6 +115,9 @@ public:
     KisImageWSP currentImage() const;
 
     KisNodeSP currentNode() const;
+
+    KoGamutMask* currentGamutMask() const;
+    bool gamutMaskActive() const;
 
     KisPaintOpPresetSP currentPreset() const;
     void setPaintOpPreset(const KisPaintOpPresetSP preset);
@@ -171,12 +175,6 @@ public:
     ///Notify that the workspace is loaded and settings can be read
     void notifyLoadingWorkspace(KisWorkspaceResource* workspace);
 
-    int selectionAction();
-    void setSelectionAction(int action);
-    int selectionMode();
-    void setSelectionMode(int mode);
-
-
 public Q_SLOTS:
 
     void slotSetFGColor(const KoColor& c);
@@ -185,6 +183,11 @@ public Q_SLOTS:
     void slotGradientActivated(KoResource *gradient);
     void slotNodeActivated(const KisNodeSP node);
     void slotPainting();
+
+    void slotGamutMaskActivated(KoGamutMask* mask);
+    void slotGamutMaskUnset();
+    void slotGamutMaskPreviewUpdate();
+    void slotGamutMaskDeactivate();
 
     /**
      * Set the image size in pixels. The resource provider will store
@@ -218,18 +221,20 @@ Q_SIGNALS:
     void sigOpacityChanged(qreal);
     void sigSavingWorkspace(KisWorkspaceResource* workspace);
     void sigLoadingWorkspace(KisWorkspaceResource* workspace);
-    void sigSelectionActionChanged(const int);
-    void sigSelectionModeChanged(const int);
 
     void mirrorModeChanged();
     void moveMirrorVerticalCenter();
     void moveMirrorHorizontalCenter();
 
+    void sigGamutMaskChanged(KoGamutMask* mask);
+    void sigGamutMaskUnset();
+    void sigGamutMaskPreviewUpdate();
+    void sigGamutMaskDeactivated();
 
 private:
 
     KisViewManager * m_view;
-    KoCanvasResourceManager *m_resourceManager;
+    KoCanvasResourceProvider *m_resourceManager;
     bool m_fGChanged;
     QList<QPointer<KisAbstractPerspectiveGrid> > m_perspectiveGrids;
 

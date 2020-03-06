@@ -26,8 +26,9 @@
 
 class QImage;
 
-class KoOdfGradientBackgroundPrivate;
 #include <KoXmlReaderForward.h>
+
+#include <QSharedDataPointer>
 class KoGenStyles;
 class KoGenStyle;
 
@@ -46,7 +47,7 @@ public:
     /// reimplemented from KoShapeBackground
     bool loadStyle(KoOdfLoadingContext& context, const QSizeF& shapeSize) override;
     /// reimplemented from KoShapeBackground
-    void paint(QPainter& painter, const KoViewConverter &converter, KoShapePaintingContext &context, const QPainterPath& fillPath) const override;
+    void paint(QPainter& painter, KoShapePaintingContext &context, const QPainterPath& fillPath) const override;
 
 private:
     bool loadOdf(const KoXmlElement &element);
@@ -57,10 +58,9 @@ private:
 
 private:
     void debug() const;
-
 private:
-    Q_DECLARE_PRIVATE(KoOdfGradientBackground)
-    Q_DISABLE_COPY(KoOdfGradientBackground)
+    class Private;
+    QSharedDataPointer<Private> d;
 };
 
 #endif

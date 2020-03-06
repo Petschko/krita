@@ -60,26 +60,23 @@
 #include <KisMimeDatabase.h>
 #include <dialogs/KisSessionManagerDialog.h>
 
-#include "KisView.h"
-#include "KisDocument.h"
 #include "kis_config.h"
 #include "kis_shape_controller.h"
 #include "KisResourceServerProvider.h"
 #include "kis_animation_cache_populator.h"
+#include "kis_image_animation_interface.h"
+#include "kis_time_range.h"
 #include "kis_idle_watcher.h"
 #include "kis_image.h"
-#include "KisImportExportManager.h"
-#include "KisDocument.h"
-#include "KoToolManager.h"
-#include "KisViewManager.h"
 #include "KisOpenPane.h"
 
 #include "kis_color_manager.h"
-#include "kis_debug.h"
 
 #include "kis_action.h"
 #include "kis_action_registry.h"
 #include "KisSessionResource.h"
+#include "KisBusyWaitBroker.h"
+#include "dialogs/kis_delayed_save_dialog.h"
 
 Q_GLOBAL_STATIC(KisPart, s_instance)
 
@@ -118,7 +115,7 @@ public:
             }
         }
 
-        return false;
+        return true;
     }
 };
 
@@ -128,6 +125,14 @@ KisPart* KisPart::instance()
     return s_instance;
 }
 
+namespace {
+void busyWaitWithFeedback(KisImageSP image)
+{
+    const int busyWaitDelay = 1000;
+    KisDelayedSaveDialog dialog(image, KisDelayedSaveDialog::ForcedDialog, busyWaitDelay, KisPart::instance()->currentMainwindow());
+    dialog.blockIfImageIsBusy();
+}
+}
 
 KisPart::KisPart()
     : d(new Private(this))
@@ -150,6 +155,7 @@ KisPart::KisPart()
 
 
     d->animationCachePopulator.slotRequestRegeneration();
+    KisBusyWaitBroker::instance()->setFeedbackCallback(&busyWaitWithFeedback);
 }
 
 KisPart::~KisPart()
@@ -229,24 +235,23 @@ KisMainWindow *KisPart::createMainWindow(QUuid id)
 }
 
 KisView *KisPart::createView(KisDocument *document,
-                             KoCanvasResourceManager *resourceManager,
-                             KActionCollection *actionCollection,
+                             KisViewManager *viewManager,
                              QWidget *parent)
 {
     // If creating the canvas fails, record this and disable OpenGL next time
     KisConfig cfg(false);
     KConfigGroup grp( KSharedConfig::openConfig(), "crashprevention");
     if (grp.readEntry("CreatingCanvas", false)) {
-        cfg.setUseOpenGL(false);
+        cfg.disableOpenGL();
     }
     if (cfg.canvasState() == "OPENGL_FAILED") {
-        cfg.setUseOpenGL(false);
+        cfg.disableOpenGL();
     }
     grp.writeEntry("CreatingCanvas", true);
     grp.sync();
 
     QApplication::setOverrideCursor(Qt::WaitCursor);
-    KisView *view  = new KisView(document, resourceManager, actionCollection, parent);
+    KisView *view = new KisView(document,  viewManager, parent);
     QApplication::restoreOverrideCursor();
 
     // Record successful canvas creation
@@ -325,6 +330,11 @@ int KisPart::viewCount(KisDocument *doc) const
 bool KisPart::closingSession() const
 {
     return d->closingSession;
+}
+
+bool KisPart::exists()
+{
+    return s_instance.exists();
 }
 
 bool KisPart::closeSession(bool keepWindows)
@@ -428,6 +438,14 @@ KisAnimationCachePopulator* KisPart::cachePopulator() const
     return &d->animationCachePopulator;
 }
 
+void KisPart::prioritizeFrameForCache(KisImageSP image, int frame) {
+    KisImageAnimationInterface* animInterface = image->animationInterface();
+    KIS_SAFE_ASSERT_RECOVER_RETURN(animInterface->fullClipRange().contains(frame));
+
+    d->animationCachePopulator.requestRegenerationWithPriorityFrame(image, frame);
+
+}
+
 void KisPart::openExistingFile(const QUrl &url)
 {
     // TODO: refactor out this method!
@@ -441,10 +459,6 @@ void KisPart::openExistingFile(const QUrl &url)
 void KisPart::updateShortcuts()
 {
     // Update any non-UI actionCollections.  That includes:
-    //  - Shortcuts called inside of tools
-    //  - Perhaps other things?
-    KoToolManager::instance()->updateToolShortcuts();
-
     // Now update the UI actions.
     Q_FOREACH (KisMainWindow *mainWindow, d->mainWindows) {
         KActionCollection *ac = mainWindow->actionCollection();
@@ -460,7 +474,7 @@ void KisPart::updateShortcuts()
             QString strippedTooltip = action->toolTip().remove(QRegExp("\\s\\(.*\\)"));
 
             // Now update the tooltips with the new shortcut info.
-            if(action->shortcut() == QKeySequence(0))
+            if (action->shortcut() == QKeySequence(0))
                 action->setToolTip(strippedTooltip);
             else
                 action->setToolTip( strippedTooltip + " (" + action->shortcut().toString() + ")");
@@ -483,6 +497,7 @@ void KisPart::openTemplate(const QUrl &url)
         mimeType.remove( QRegExp( "-template$" ) );
         document->setMimeTypeAfterLoading(mimeType);
         document->resetURL();
+        document->setReadWrite(true);
     }
     else {
         if (document->errorMessage().isEmpty()) {
@@ -509,11 +524,11 @@ void KisPart::openTemplate(const QUrl &url)
     qApp->restoreOverrideCursor();
 }
 
-void KisPart::addRecentURLToAllMainWindows(QUrl url)
+void KisPart::addRecentURLToAllMainWindows(QUrl url, QUrl oldUrl)
 {
     // Add to recent actions list in our mainWindows
     Q_FOREACH (KisMainWindow *mainWindow, d->mainWindows) {
-        mainWindow->addRecentURL(url);
+        mainWindow->addRecentURL(url, oldUrl);
     }
 }
 

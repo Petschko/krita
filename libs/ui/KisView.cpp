@@ -24,7 +24,6 @@
 #include <KoDockFactoryBase.h>
 #include <KoDockRegistry.h>
 #include <KoDocumentInfo.h>
-#include "KoDocumentInfo.h"
 #include "KoPageLayout.h"
 #include <KoToolManager.h>
 
@@ -35,7 +34,6 @@
 #include <kis_debug.h>
 #include <kselectaction.h>
 #include <kconfiggroup.h>
-#include <kactioncollection.h>
 
 #include <QMenu>
 #include <QMessageBox>
@@ -50,10 +48,8 @@
 #include <QList>
 #include <QPrintDialog>
 #include <QToolBar>
-#include <QUrl>
 #include <QStatusBar>
 #include <QMoveEvent>
-#include <QTemporaryFile>
 #include <QMdiSubWindow>
 
 #include <kis_image.h>
@@ -108,13 +104,13 @@ class Q_DECL_HIDDEN KisView::Private
 public:
     Private(KisView *_q,
             KisDocument *document,
-            KoCanvasResourceManager *resourceManager,
-            KActionCollection *actionCollection)
-        : actionCollection(actionCollection)
+            KisViewManager *viewManager)
+        : actionCollection(viewManager->actionCollection())
         , viewConverter()
-        , canvasController(_q, actionCollection)
-        , canvas(&viewConverter, resourceManager, _q, document->shapeController())
+        , canvasController(_q, viewManager->mainWindow(), viewManager->actionCollection())
+        , canvas(&viewConverter, viewManager->canvasResourceProvider()->resourceManager(), viewManager->mainWindow(), _q, document->shapeController())
         , zoomManager(_q, &this->viewConverter, &this->canvasController)
+        , viewManager(viewManager)
         , paintingAssistantsDecoration(new KisPaintingAssistantsDecoration(_q))
         , referenceImagesDecoration(new KisReferenceImagesDecoration(_q, document))
         , floatingMessageCompressor(100, KisSignalCompressor::POSTPONE)
@@ -125,14 +121,6 @@ public:
 
     QPointer<KisDocument> document; // our KisDocument
     QWidget *tempActiveWidget = 0;
-
-    /**
-     * Signals the document has been deleted. Can't use document==0 since this
-     * only happens in ~QObject, and views get deleted by ~KisDocument.
-     * XXX: either provide a better justification to do things this way, or
-     * rework the mechanism.
-     */
-    bool documentDeleted = false;
 
     KActionCollection* actionCollection;
     KisCoordinatesConverter viewConverter;
@@ -210,9 +198,9 @@ public:
 
 };
 
-KisView::KisView(KisDocument *document, KoCanvasResourceManager *resourceManager, KActionCollection *actionCollection, QWidget *parent)
+KisView::KisView(KisDocument *document, KisViewManager *viewManager, QWidget *parent)
     : QWidget(parent)
-    , d(new Private(this, document, resourceManager, actionCollection))
+    , d(new Private(this, document, viewManager))
 {
     Q_ASSERT(document);
     connect(document, SIGNAL(titleModified(QString,bool)), this, SIGNAL(titleModified(QString,bool)));
@@ -224,8 +212,8 @@ KisView::KisView(KisDocument *document, KoCanvasResourceManager *resourceManager
 
     QStatusBar * sb = statusBar();
     if (sb) { // No statusbar in e.g. konqueror
-        connect(d->document, SIGNAL(statusBarMessage(const QString&, int)),
-                this, SLOT(slotSavingStatusMessage(const QString&, int)));
+        connect(d->document, SIGNAL(statusBarMessage(QString,int)),
+                this, SLOT(slotSavingStatusMessage(QString,int)));
         connect(d->document, SIGNAL(clearStatusBarMessage()),
                 this, SLOT(slotClearStatusText()));
     }
@@ -255,6 +243,7 @@ KisView::KisView(KisDocument *document, KoCanvasResourceManager *resourceManager
     d->paintingAssistantsDecoration->setVisible(true);
 
     d->showFloatingMessage = cfg.showCanvasMessages();
+    d->zoomManager.updateScreenResolution(this);
 }
 
 KisView::~KisView()
@@ -306,7 +295,7 @@ void KisView::setShowFloatingMessage(bool show)
     d->showFloatingMessage = show;
 }
 
-void KisView::showFloatingMessageImpl(const QString &message, const QIcon& icon, int timeout, KisFloatingMessage::Priority priority, int alignment)
+void KisView::showFloatingMessage(const QString &message, const QIcon& icon, int timeout, KisFloatingMessage::Priority priority, int alignment)
 {
     if (!d->viewManager) return;
 
@@ -345,7 +334,7 @@ void KisView::setViewManager(KisViewManager *view)
         d->viewManager->nodeManager()->nodesUpdated();
     }
 
-    connect(image(), SIGNAL(sigSizeChanged(const QPointF&, const QPointF&)), this, SLOT(slotImageSizeChanged(const QPointF&, const QPointF&)));
+    connect(image(), SIGNAL(sigSizeChanged(QPointF,QPointF)), this, SLOT(slotImageSizeChanged(QPointF,QPointF)));
     connect(image(), SIGNAL(sigResolutionChanged(double,double)), this, SLOT(slotImageResolutionChanged()));
 
     // executed in a context of an image thread
@@ -431,7 +420,7 @@ KisCanvasController *KisView::canvasController() const
 KisCanvasResourceProvider *KisView::resourceProvider() const
 {
     if (d->viewManager) {
-        return d->viewManager->resourceProvider();
+        return d->viewManager->canvasResourceProvider();
     }
     return 0;
 }
@@ -461,6 +450,7 @@ KisCoordinatesConverter *KisView::viewConverter() const
 
 void KisView::dragEnterEvent(QDragEnterEvent *event)
 {
+    //qDebug() << "KisView::dragEnterEvent formats" << event->mimeData()->formats() << "urls" << event->mimeData()->urls() << "has images" << event->mimeData()->hasImage();
     if (event->mimeData()->hasImage()
             || event->mimeData()->hasUrls()
             || event->mimeData()->hasFormat("application/x-krita-node")) {
@@ -492,6 +482,9 @@ void KisView::dropEvent(QDropEvent *event)
         pasteCenter = imageBounds.center();
         forceRecenter = false;
     }
+
+    //qDebug() << "KisView::dropEvent() formats" << event->mimeData()->formats() << "urls" << event->mimeData()->urls() << "has images" << event->mimeData()->hasImage();
+
     if (event->mimeData()->hasFormat("application/x-krita-node") ||
             event->mimeData()->hasImage())
     {
@@ -572,7 +565,7 @@ void KisView::dropEvent(QDropEvent *event)
                         tmp = new QTemporaryFile();
                         tmp->setAutoRemove(true);
                         if (!fetcher.fetchFile(url, tmp)) {
-                            qDebug() << "Fetching" << url << "failed";
+                            qWarning() << "Fetching" << url << "failed";
                             continue;
                         }
                         url = url.fromLocalFile(tmp->fileName());
@@ -611,6 +604,17 @@ void KisView::dropEvent(QDropEvent *event)
             }
         }
     }
+}
+
+void KisView::dragMoveEvent(QDragMoveEvent *event)
+{
+    //qDebug() << "KisView::dragMoveEvent";
+    if (event->mimeData()->hasUrls() ||
+        event->mimeData()->hasFormat("application/x-krita-node") ||
+        event->mimeData()->hasFormat("application/x-qt-image")) {
+
+        event->accept();
+    }
 
 }
 
@@ -619,22 +623,12 @@ KisDocument *KisView::document() const
     return d->document;
 }
 
-void KisView::setDocument(KisDocument *document)
+KisView *KisView::replaceBy(KisDocument *document)
 {
-    d->document->disconnect(this);
-    d->document = document;
-    QStatusBar *sb = statusBar();
-    if (sb) { // No statusbar in e.g. konqueror
-        connect(d->document, SIGNAL(statusBarMessage(const QString&, int)),
-                this, SLOT(slotSavingStatusMessage(const QString&, int)));
-        connect(d->document, SIGNAL(clearStatusBarMessage()),
-                this, SLOT(slotClearStatusText()));
-    }
-}
-
-void KisView::setDocumentDeleted()
-{
-    d->documentDeleted = true;
+    KisMainWindow *window = mainWindow();
+    QMdiSubWindow *subWindow = d->subWindow;
+    delete this;
+    return window->newView(document, subWindow);
 }
 
 QPrintDialog *KisView::createPrintDialog(KisPrintJob *printJob, QWidget *parent)
@@ -649,7 +643,7 @@ QPrintDialog *KisView::createPrintDialog(KisPrintJob *printJob, QWidget *parent)
 
 KisMainWindow * KisView::mainWindow() const
 {
-    return dynamic_cast<KisMainWindow *>(window());
+    return d->viewManager->mainWindow();
 }
 
 void KisView::setSubWindow(QMdiSubWindow *subWindow)
@@ -705,7 +699,6 @@ void KisView::closeEvent(QCloseEvent *event)
     }
 
     if (queryClose()) {
-        d->viewManager->statusBar()->setView(0);
         event->accept();
         return;
     }
@@ -749,7 +742,7 @@ bool KisView::queryClose()
             image->requestStrokeCancellation();
             viewManager()->blockUntilOperationsFinishedForced(image);
 
-            document()->removeAutoSaveFiles();
+            document()->removeAutoSaveFiles(document()->localFilePath(), document()->isRecovered());
             document()->setModified(false);   // Now when queryClose() is called by closeEvent it won't do anything.
             break;
         }
@@ -760,6 +753,28 @@ bool KisView::queryClose()
 
     return true;
 
+}
+
+void KisView::slotScreenChanged()
+{
+    d->zoomManager.updateScreenResolution(this);
+}
+
+void KisView::slotThemeChanged(QPalette pal)
+{
+    this->setPalette(pal);
+    for (int i=0; i<this->children().size();i++) {
+        QWidget *w = qobject_cast<QWidget*> ( this->children().at(i));
+        if (w) {
+            w->setPalette(pal);
+        }
+    }
+    if (canvasBase()) {
+        canvasBase()->canvasWidget()->setPalette(pal);
+    }
+    if (canvasController()) {
+        canvasController()->setPalette(pal);
+    }
 }
 
 void KisView::resetImageSizeAndScroll(bool changeCentering,
@@ -782,7 +797,7 @@ void KisView::resetImageSizeAndScroll(bool changeCentering,
                 converter->imageToWidget(oldImageStillPoint) +
                 converter->documentOffset();
     } else {
-        QSize oldDocumentSize = d->canvasController.documentSize();
+        QSizeF oldDocumentSize = d->canvasController.documentSize();
         oldStillPoint = QPointF(0.5 * oldDocumentSize.width(), 0.5 * oldDocumentSize.height());
     }
 
@@ -808,7 +823,7 @@ void KisView::resetImageSizeAndScroll(bool changeCentering,
                 converter->imageToWidget(newImageStillPoint) +
                 converter->documentOffset();
     } else {
-        QSize newDocumentSize = d->canvasController.documentSize();
+        QSizeF newDocumentSize = d->canvasController.documentSize();
         newStillPoint = QPointF(0.5 * newDocumentSize.width(), 0.5 * newDocumentSize.height());
     }
 
@@ -987,6 +1002,7 @@ void KisView::slotLoadingFinished()
     }
 
     setCurrentNode(activeNode);
+    connect(d->viewManager->mainWindow(), SIGNAL(screenChanged()), SLOT(slotScreenChanged()));
     zoomManager()->updateImageBoundsSnapping();
 }
 
@@ -1011,7 +1027,7 @@ void KisView::slotImageResolutionChanged()
     // update KoUnit value for the document
     if (resourceProvider()) {
         resourceProvider()->resourceManager()->
-                setResource(KoCanvasResourceManager::Unit, d->canvas.unit());
+                setResource(KoCanvasResourceProvider::Unit, d->canvas.unit());
     }
 }
 

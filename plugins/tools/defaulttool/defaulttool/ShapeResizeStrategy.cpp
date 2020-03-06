@@ -103,10 +103,10 @@ ShapeResizeStrategy::ShapeResizeStrategy(KoToolBase *tool, KoSelection *selectio
         }
 
         const QPointF p0 = shape->outlineRect().topLeft();
-        m_globalStillPoint = shape->absoluteTransformation(0).map(p0 + m_globalStillPoint);
+        m_globalStillPoint = shape->absoluteTransformation().map(p0 + m_globalStillPoint);
         m_globalCenterPoint = shape->absolutePosition(KoFlake::Center);
 
-        m_unwindMatrix = shape->absoluteTransformation(0).inverted();
+        m_unwindMatrix = shape->absoluteTransformation().inverted();
         m_initialSelectionSize = shape->size();
         m_postScalingCoveringTransform = shape->transformation();
     }
@@ -194,10 +194,18 @@ void ShapeResizeStrategy::handleMouseMove(const QPointF &point, Qt::KeyboardModi
 
     if (keepAspect) {
         const bool cornerUsed = ((m_bottom ? 1 : 0) + (m_top ? 1 : 0) + (m_left ? 1 : 0) + (m_right ? 1 : 0)) == 2;
-        if ((cornerUsed && startWidth < startHeight) || m_left || m_right) {
-            zoomY = zoomX;
+        if (cornerUsed) {
+            if (startWidth < startHeight) {
+                zoomY = zoomX;
+            } else {
+                zoomX = zoomY;
+            }
         } else {
-            zoomX = zoomY;
+            if (m_left || m_right) {
+               zoomY = qAbs(zoomX);
+            } else {
+               zoomX = qAbs(zoomY);
+            }
         }
     }
 
@@ -206,20 +214,19 @@ void ShapeResizeStrategy::handleMouseMove(const QPointF &point, Qt::KeyboardModi
 
 void ShapeResizeStrategy::resizeBy(const QPointF &stillPoint, qreal zoomX, qreal zoomY)
 {
-    if (m_executedCommand) {
-        m_executedCommand->undo();
-        m_executedCommand.reset();
+    if (!m_executedCommand) {
+        const bool usePostScaling = m_selectedShapes.size() > 1 || m_forceUniformScalingMode;
+
+        m_executedCommand.reset(
+                    new KoShapeResizeCommand(
+                        m_selectedShapes,
+                        zoomX, zoomY,
+                        stillPoint,
+                        false, usePostScaling, m_postScalingCoveringTransform));
+        m_executedCommand->redo();
+    } else {
+        m_executedCommand->replaceResizeAction(zoomX, zoomY, stillPoint);
     }
-
-    const bool usePostScaling = m_selectedShapes.size() > 1 || m_forceUniformScalingMode;
-
-    m_executedCommand.reset(
-         new KoShapeResizeCommand(
-                    m_selectedShapes,
-                    zoomX, zoomY,
-                    stillPoint,
-                    false, usePostScaling, m_postScalingCoveringTransform));
-    m_executedCommand->redo();
 }
 
 KUndo2Command *ShapeResizeStrategy::createCommand()

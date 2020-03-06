@@ -27,6 +27,7 @@
 KisNetworkAccessManager::KisNetworkAccessManager(QObject *parent)
     : QNetworkAccessManager(parent)
 {
+    setRedirectPolicy(QNetworkRequest::NoLessSafeRedirectPolicy);
 }
 
 void KisNetworkAccessManager::getUrl(const QUrl &url)
@@ -44,7 +45,6 @@ QNetworkReply* KisNetworkAccessManager::createRequest(Operation op, const QNetwo
             .arg(QSysInfo::prettyProductName())
             .arg(QLocale::system().name())
             .arg(QSysInfo::WordSize);
-    qDebug() << "Agent String" << agentStr;
     QNetworkRequest req(request);
     req.setRawHeader("User-Agent", agentStr.toLatin1());
     return QNetworkAccessManager::createRequest(op, req, outgoingData);

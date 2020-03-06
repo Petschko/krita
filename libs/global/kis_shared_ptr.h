@@ -40,8 +40,8 @@ class KisWeakSharedPtr;
  * pointer just as you would use a real pointer.
  *
  * See also also item 28 and 29 of More Effective C++ and
- * http://bugs.kde.org/show_bug.cgi?id=52261 as well as
- * http://www.boost.org/libs/smart_ptr/shared_ptr.htm.
+ * https://bugs.kde.org/show_bug.cgi?id=52261 as well as
+ * https://www.boost.org/libs/smart_ptr/shared_ptr.htm.
  *
  * Advantage of KisSharedPtr over boost pointer or QSharedPointer?
  *
@@ -57,11 +57,11 @@ class KisWeakSharedPtr;
  *
  * KisSharedPtr requires the class to inherits KisShared.
  *
- * Difference with QSharedDataPointer
+ * Difference with QSharedPointer
  *
- * QSharedDataPointer and KisSharedPtr are very similar, but
- * QSharedDataPointer has an explicit constructor which makes it more
- * painful to use in some constructions. And QSharedDataPointer
+ * QSharedPointer and KisSharedPtr are very similar, but
+ * QSharedPointer has an explicit constructor which makes it more
+ * painful to use in some constructions. And QSharedPointer
  * doesn't offer a weak pointer.
  */
 template<class T>

@@ -2,7 +2,7 @@
  * @file
  *
  * This file is a part of digiKam project
- * <a href="http://www.digikam.org">http://www.digikam.org</a>
+ * <a href="https://www.digikam.org">https://www.digikam.org</a>
  *
  * @date   2014-09-12
  * @brief  Simple helper widgets collection
@@ -34,6 +34,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QApplication>
+#include <QScreen>
 #include <QDesktopWidget>
 #include <QPushButton>
 #include <QFileInfo>
@@ -258,8 +259,18 @@ QSize RAdjustableLabel::minimumSizeHint() const
 QSize RAdjustableLabel::sizeHint() const
 {
     QFontMetrics fm(fontMetrics());
+#if (QT_VERSION >= QT_VERSION_CHECK(5, 10, 0))
+    QScreen *s = qApp->screenAt(geometry().topLeft());
+    int maxW     = s->availableGeometry().width() * 3 / 4;
+#else
     int maxW     = QApplication::desktop()->screenGeometry(this).width() * 3 / 4;
+#endif
+
+#if QT_VERSION >= QT_VERSION_CHECK(5,11,0)
+    int currentW = fm.horizontalAdvance(d->ajdText);
+#else
     int currentW = fm.width(d->ajdText);
+#endif
 
     return (QSize(currentW > maxW ? maxW : currentW, QLabel::sizeHint().height()));
 }
@@ -301,8 +312,11 @@ void RAdjustableLabel::adjustTextToLabel()
 
     Q_FOREACH(const QString& line, d->ajdText.split(QLatin1Char('\n')))
     {
+#if QT_VERSION >= QT_VERSION_CHECK(5,11,0)
+        int lineW = fm.horizontalAdvance(line);
+#else
         int lineW = fm.width(line);
-
+#endif
         if (lineW > lblW)
         {
             adjusted = true;
@@ -610,7 +624,7 @@ void RColorSelector::paintEvent(QPaintEvent*)
         QStyleOptionFocusRect focusOpt;
         focusOpt.init(this);
         focusOpt.rect            = focusRect;
-        focusOpt.backgroundColor = palette().background().color();
+        focusOpt.backgroundColor = palette().window().color();
         style->drawPrimitive(QStyle::PE_FrameFocusRect, &focusOpt, &painter, this);
     }
 }

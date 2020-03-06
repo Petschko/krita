@@ -27,6 +27,7 @@
 #include <KoSelectedShapesProxy.h>
 #include <KoShapeManager.h>
 #include <kis_image_view_converter.h>
+#include <KisSafeBlockingQueueConnectionProxy.h>
 
 class KoShapeManager;
 class KoToolProxy;
@@ -46,6 +47,9 @@ public:
     virtual void setImage(KisImageWSP image) = 0;
     void prepareForDestroying();
     virtual void forceRepaint() = 0;
+    virtual bool hasPendingUpdates() const = 0;
+
+    virtual void forceRepaintWithHiddenAreas() { forceRepaint(); }
 
     bool hasChangedWhileBeingInvisible();
     virtual void rerenderAfterBeingInvisible() = 0;
@@ -97,6 +101,9 @@ public:
     void updateCanvas(const QRectF& rc) override;
     void updateCanvas(const QVector<QRectF> &region);
     void forceRepaint() override;
+    bool hasPendingUpdates() const override;
+
+    void forceRepaintWithHiddenAreas() override;
 
     void resetCache() override;
     void rerenderAfterBeingInvisible() override;
@@ -107,18 +114,18 @@ private Q_SLOTS:
     void slotStartAsyncRepaint();
     void slotImageSizeChanged();
 
-Q_SIGNALS:
-    void forwardRepaint();
-
 private:
     KisPaintDeviceSP m_projection;
-    KisShapeLayer *m_parentLayer;
+    KisShapeLayer *m_parentLayer {0};
 
     KisThreadSafeSignalCompressor m_asyncUpdateSignalCompressor;
     volatile bool m_hasUpdateInCompressor = false;
+    KisSafeBlockingQueueConnectionProxy<void> m_safeForcedConnection;
 
+    bool m_forceUpdateHiddenAreasOnly = false;
     QRegion m_dirtyRegion;
     QMutex m_dirtyRegionMutex;
+    KoShapeManager::PaintJobsList m_paintJobs;
 
     QRect m_cachedImageRect;
 

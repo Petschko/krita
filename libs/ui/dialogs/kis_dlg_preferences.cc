@@ -21,6 +21,7 @@
 
 #include "kis_dlg_preferences.h"
 
+#include <config-hdr.h>
 #include <opengl/kis_opengl.h>
 
 #include <QBitmap>
@@ -34,9 +35,9 @@
 #include <QToolButton>
 #include <QThread>
 #include <QStandardPaths>
+#include <QGroupBox>
 #include <QGridLayout>
 #include <QRadioButton>
-#include <QGroupBox>
 #include <QMdiArea>
 #include <QMessageBox>
 #include <QDesktopWidget>
@@ -62,7 +63,7 @@
 #include <KoResourcePaths.h>
 #include "kis_action_registry.h"
 #include <kis_image.h>
-#include <squeezedcombobox.h>
+#include <KisSqueezedComboBox.h>
 #include "kis_clipboard.h"
 #include "widgets/kis_cmb_idlist.h"
 #include "KoColorSpace.h"
@@ -86,8 +87,35 @@
 #include "input/wintab/drawpile_tablettester/tablettester.h"
 
 #ifdef Q_OS_WIN
-#  include <kis_tablet_support_win8.h>
+#include "config_use_qt_tablet_windows.h"
+#   ifndef USE_QT_TABLET_WINDOWS
+#       include <kis_tablet_support_win8.h>
+#   endif
+#include "config-high-dpi-scale-factor-rounding-policy.h"
 #endif
+
+struct BackupSuffixValidator : public QValidator {
+    BackupSuffixValidator(QObject *parent)
+        : QValidator(parent)
+        , invalidCharacters(QStringList()
+                            << "0" << "1" << "2" << "3" << "4" << "5" << "6" << "7" << "8" << "9"
+                            << "/" << "\\" << ":" << ";" << " ")
+    {}
+
+    ~BackupSuffixValidator() override {}
+
+    const QStringList invalidCharacters;
+
+    State validate(QString &line, int &/*pos*/) const override
+    {
+        Q_FOREACH(const QString invalidChar, invalidCharacters) {
+            if (line.contains(invalidChar)) {
+                return Invalid;
+            }
+        }
+        return Acceptable;
+    }
+};
 
 
 GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
@@ -133,8 +161,8 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     connect(m_bnFileName, SIGNAL(clicked()), SLOT(getBackgroundImage()));
     connect(clearBgImageButton, SIGNAL(clicked()), SLOT(clearBackgroundImage()));
 
-    KoColor mdiColor;
-    mdiColor.fromQColor(cfg.getMDIBackgroundColor());
+    QString xml = cfg.getMDIBackgroundColor();
+    KoColor mdiColor = KoColor::fromXML(xml);
     m_mdiColor->setColor(mdiColor);
 
     m_chkRubberBand->setChecked(cfg.readEntry<int>("mdi_rubberband", cfg.useOpenGL()));
@@ -143,24 +171,55 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
 
     const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
     QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
-    m_chkHiDPI->setChecked(kritarc.value("EnableHiDPI", false).toBool());
-
+    m_chkHiDPI->setChecked(kritarc.value("EnableHiDPI", true).toBool());
+#ifdef HAVE_HIGH_DPI_SCALE_FACTOR_ROUNDING_POLICY
+    m_chkHiDPIFractionalScaling->setChecked(kritarc.value("EnableHiDPIFractionalScaling", true).toBool());
+#else
+    m_chkHiDPIFractionalScaling->setVisible(false);
+#endif
+    chkUsageLogging->setChecked(kritarc.value("LogUsage", true).toBool());
     m_chkSingleApplication->setChecked(kritarc.value("EnableSingleApplication", true).toBool());
 
     //
     // Tools tab
     //
     m_radioToolOptionsInDocker->setChecked(cfg.toolOptionsInDocker());
+    cmbFlowMode->setCurrentIndex((int)!cfg.readEntry<bool>("useCreamyAlphaDarken", true));
     m_chkSwitchSelectionCtrlAlt->setChecked(cfg.switchSelectionCtrlAlt());
     chkEnableTouch->setChecked(!cfg.disableTouchOnCanvas());
+    chkEnableTouchRotation->setChecked(!cfg.disableTouchRotation());
+    chkEnableTranformToolAfterPaste->setChecked(cfg.activateTransformToolAfterPaste());
 
-    m_cmbKineticScrollingGesture->addItem(i18n("Disabled"));
+    m_groupBoxKineticScrollingSettings->setChecked(cfg.kineticScrollingEnabled());
+
     m_cmbKineticScrollingGesture->addItem(i18n("On Touch Drag"));
     m_cmbKineticScrollingGesture->addItem(i18n("On Click Drag"));
+    m_cmbKineticScrollingGesture->addItem(i18n("On Middle-Click Drag"));
+    //m_cmbKineticScrollingGesture->addItem(i18n("On Right Click Drag"));
 
     m_cmbKineticScrollingGesture->setCurrentIndex(cfg.kineticScrollingGesture());
-    m_kineticScrollingSensitivity->setValue(cfg.kineticScrollingSensitivity());
-    m_chkKineticScrollingScrollbar->setChecked(cfg.kineticScrollingScrollbar());
+    m_kineticScrollingSensitivitySlider->setRange(0, 100);
+    m_kineticScrollingSensitivitySlider->setValue(cfg.kineticScrollingSensitivity());
+    m_chkKineticScrollingHideScrollbars->setChecked(cfg.kineticScrollingHiddenScrollbars());
+
+    //
+    // File handling
+    //
+    int autosaveInterval = cfg.autoSaveInterval();
+    //convert to minutes
+    m_autosaveSpinBox->setValue(autosaveInterval / 60);
+    m_autosaveCheckBox->setChecked(autosaveInterval > 0);
+    chkHideAutosaveFiles->setChecked(cfg.readEntry<bool>("autosavefileshidden", true));
+
+    m_chkCompressKra->setChecked(cfg.compressKra());
+    chkZip64->setChecked(cfg.useZip64());
+
+    m_backupFileCheckBox->setChecked(cfg.backupFile());
+    cmbBackupFileLocation->setCurrentIndex(cfg.readEntry<int>("backupfilelocation", 0));
+    txtBackupFileSuffix->setText(cfg.readEntry<QString>("backupfilesuffix", "~"));
+    QValidator *validator = new BackupSuffixValidator(txtBackupFileSuffix);
+    txtBackupFileSuffix->setValidator(validator);
+    intNumBackupFiles->setValue(cfg.readEntry<int>("numberofbackupfiles", 1));
 
     //
     // Miscellaneous
@@ -171,15 +230,6 @@ GeneralTab::GeneralTab(QWidget *_parent, const char *_name)
     cmbStartupSession->setCurrentIndex(cfg.sessionOnStartup());
 
     chkSaveSessionOnQuit->setChecked(cfg.saveSessionOnQuit(false));
-
-    int autosaveInterval = cfg.autoSaveInterval();
-    //convert to minutes
-    m_autosaveSpinBox->setValue(autosaveInterval / 60);
-    m_autosaveCheckBox->setChecked(autosaveInterval > 0);
-
-    m_chkCompressKra->setChecked(cfg.compressKra());
-
-    m_backupFileCheckBox->setChecked(cfg.backupFile());
 
     m_chkConvertOnImport->setChecked(cfg.convertToImageColorspaceOnImport());
 
@@ -214,8 +264,15 @@ void GeneralTab::setDefault()
     m_autosaveCheckBox->setChecked(cfg.autoSaveInterval(true) > 0);
     //convert to minutes
     m_autosaveSpinBox->setValue(cfg.autoSaveInterval(true) / 60);
+    chkHideAutosaveFiles->setChecked(true);
+
     m_undoStackSize->setValue(cfg.undoStackLimit(true));
+
     m_backupFileCheckBox->setChecked(cfg.backupFile(true));
+    cmbBackupFileLocation->setCurrentIndex(0);
+    txtBackupFileSuffix->setText("~");
+    intNumBackupFiles->setValue(1);
+
     m_showOutlinePainting->setChecked(cfg.showOutlineWhilePainting(true));
     m_changeBrushOutline->setChecked(!cfg.forceAlwaysFullSizedOutline(true));
 
@@ -226,26 +283,38 @@ void GeneralTab::setDefault()
     m_chkRubberBand->setChecked(cfg.useOpenGL(true));
     m_favoritePresetsSpinBox->setValue(cfg.favoritePresets(true));
     KoColor mdiColor;
-    mdiColor.fromQColor(cfg.getMDIBackgroundColor(true));
+    mdiColor.fromXML(cfg.getMDIBackgroundColor(true));
     m_mdiColor->setColor(mdiColor);
     m_backgroundimage->setText(cfg.getMDIBackgroundImage(true));
     m_chkCanvasMessages->setChecked(cfg.showCanvasMessages(true));
     m_chkCompressKra->setChecked(cfg.compressKra(true));
+    chkZip64->setChecked(cfg.useZip64(true));
     m_chkHiDPI->setChecked(false);
     m_chkSingleApplication->setChecked(true);
 
     m_chkHiDPI->setChecked(true);
+#ifdef HAVE_HIGH_DPI_SCALE_FACTOR_ROUNDING_POLICY
+    m_chkHiDPIFractionalScaling->setChecked(true);
+#endif
+    chkUsageLogging->setChecked(true);
     m_radioToolOptionsInDocker->setChecked(cfg.toolOptionsInDocker(true));
+    cmbFlowMode->setCurrentIndex(0);
+    m_groupBoxKineticScrollingSettings->setChecked(cfg.kineticScrollingEnabled(true));
     m_cmbKineticScrollingGesture->setCurrentIndex(cfg.kineticScrollingGesture(true));
-    m_kineticScrollingSensitivity->setValue(cfg.kineticScrollingSensitivity(true));
-    m_chkKineticScrollingScrollbar->setChecked(cfg.kineticScrollingScrollbar(true));
+    m_kineticScrollingSensitivitySlider->setValue(cfg.kineticScrollingSensitivity(true));
+    m_chkKineticScrollingHideScrollbars->setChecked(cfg.kineticScrollingHiddenScrollbars(true));
     m_chkSwitchSelectionCtrlAlt->setChecked(cfg.switchSelectionCtrlAlt(true));
     chkEnableTouch->setChecked(!cfg.disableTouchOnCanvas(true));
+    chkEnableTouchRotation->setChecked(!cfg.disableTouchRotation(true));
+    chkEnableTranformToolAfterPaste->setChecked(cfg.activateTransformToolAfterPaste(true));
     m_chkConvertOnImport->setChecked(cfg.convertToImageColorspaceOnImport(true));
 
     KoColor cursorColor(KoColorSpaceRegistry::instance()->rgb8());
     cursorColor.fromQColor(cfg.getCursorMainColor(true));
     cursorColorBtutton->setColor(cursorColor);
+
+
+
 }
 
 CursorStyle GeneralTab::cursorStyle()
@@ -309,9 +378,19 @@ bool GeneralTab::compressKra()
     return m_chkCompressKra->isChecked();
 }
 
+bool GeneralTab::useZip64()
+{
+    return chkZip64->isChecked();
+}
+
 bool GeneralTab::toolOptionsInDocker()
 {
     return m_radioToolOptionsInDocker->isChecked();
+}
+
+bool GeneralTab::kineticScrollingEnabled()
+{
+    return m_groupBoxKineticScrollingSettings->isChecked();
 }
 
 int GeneralTab::kineticScrollingGesture()
@@ -321,12 +400,12 @@ int GeneralTab::kineticScrollingGesture()
 
 int GeneralTab::kineticScrollingSensitivity()
 {
-    return m_kineticScrollingSensitivity->value();
+    return m_kineticScrollingSensitivitySlider->value();
 }
 
-bool GeneralTab::kineticScrollingScrollbar()
+bool GeneralTab::kineticScrollingHiddenScrollbars()
 {
-    return m_chkKineticScrollingScrollbar->isChecked();
+    return m_chkKineticScrollingHideScrollbars->isChecked();
 }
 
 bool GeneralTab::switchSelectionCtrlAlt()
@@ -445,18 +524,25 @@ ColorSettingsTab::ColorSettingsTab(QWidget *parent, const char *name)
     connect(m_page->bnAddColorProfile, SIGNAL(clicked()), SLOT(installProfile()));
 
     QFormLayout *monitorProfileGrid = new QFormLayout(m_page->monitorprofileholder);
-    for(int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+    for(int i = 0; i < QGuiApplication::screens().count(); ++i) {
         QLabel *lbl = new QLabel(i18nc("The number of the screen", "Screen %1:", i + 1));
         m_monitorProfileLabels << lbl;
-        SqueezedComboBox *cmb = new SqueezedComboBox();
+        KisSqueezedComboBox *cmb = new KisSqueezedComboBox();
         cmb->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Fixed);
         monitorProfileGrid->addRow(lbl, cmb);
         m_monitorProfileWidgets << cmb;
     }
 
+// disable if not Linux as KisColorManager is not yet implemented outside Linux
+#ifndef Q_OS_LINUX
+    m_page->chkUseSystemMonitorProfile->setChecked(false);
+    m_page->chkUseSystemMonitorProfile->setDisabled(true);
+    m_page->chkUseSystemMonitorProfile->setHidden(true);
+#endif
+
     refillMonitorProfiles(KoID("RGBA"));
 
-    for(int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+    for(int i = 0; i < QApplication::screens().count(); ++i) {
         if (m_monitorProfileWidgets[i]->contains(cfg.monitorProfile(i))) {
             m_monitorProfileWidgets[i]->setCurrent(cfg.monitorProfile(i));
         }
@@ -464,7 +550,7 @@ ColorSettingsTab::ColorSettingsTab(QWidget *parent, const char *name)
 
     m_page->chkBlackpoint->setChecked(cfg.useBlackPointCompensation());
     m_page->chkAllowLCMSOptimization->setChecked(cfg.allowLCMSOptimization());
-
+    m_page->chkForcePaletteColor->setChecked(cfg.forcePaletteColors());
     KisImageConfig cfgImage(true);
 
     KisProofingConfigurationSP proofingConfig = cfgImage.defaultProofingconfiguration();
@@ -528,7 +614,7 @@ void ColorSettingsTab::installProfile()
     KisConfig cfg(true);
     refillMonitorProfiles(KoID("RGBA"));
 
-    for(int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+    for(int i = 0; i < QApplication::screens().count(); ++i) {
         if (m_monitorProfileWidgets[i]->contains(cfg.monitorProfile(i))) {
             m_monitorProfileWidgets[i]->setCurrent(cfg.monitorProfile(i));
         }
@@ -542,8 +628,8 @@ void ColorSettingsTab::toggleAllowMonitorProfileSelection(bool useSystemProfile)
 
     if (useSystemProfile) {
         QStringList devices = KisColorManager::instance()->devices();
-        if (devices.size() == QApplication::desktop()->screenCount()) {
-            for(int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+        if (devices.size() == QApplication::screens().count()) {
+            for(int i = 0; i < QApplication::screens().count(); ++i) {
                 m_monitorProfileWidgets[i]->clear();
                 QString monitorForScreen = cfg.monitorForScreen(i, devices[i]);
                 Q_FOREACH (const QString &device, devices) {
@@ -559,7 +645,7 @@ void ColorSettingsTab::toggleAllowMonitorProfileSelection(bool useSystemProfile)
     else {
         refillMonitorProfiles(KoID("RGBA"));
 
-        for(int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+        for(int i = 0; i < QApplication::screens().count(); ++i) {
             if (m_monitorProfileWidgets[i]->contains(cfg.monitorProfile(i))) {
                 m_monitorProfileWidgets[i]->setCurrent(cfg.monitorProfile(i));
             }
@@ -591,6 +677,7 @@ void ColorSettingsTab::setDefault()
 
     m_page->chkBlackpoint->setChecked(cfg.useBlackPointCompensation(true));
     m_page->chkAllowLCMSOptimization->setChecked(cfg.allowLCMSOptimization(true));
+    m_page->chkForcePaletteColor->setChecked(cfg.forcePaletteColors(true));
     m_page->cmbMonitorIntent->setCurrentIndex(cfg.monitorRenderIntent(true));
     m_page->chkUseSystemMonitorProfile->setChecked(cfg.useSystemMonitorProfile(true));
     QAbstractButton *button = m_pasteBehaviourGroup.button(cfg.pasteBehaviour(true));
@@ -603,7 +690,7 @@ void ColorSettingsTab::setDefault()
 
 void ColorSettingsTab::refillMonitorProfiles(const KoID & colorSpaceId)
 {
-    for (int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+    for (int i = 0; i < QApplication::screens().count(); ++i) {
         m_monitorProfileWidgets[i]->clear();
     }
 
@@ -615,13 +702,13 @@ void ColorSettingsTab::refillMonitorProfiles(const KoID & colorSpaceId)
     Q_FOREACH (const KoColorProfile *profile, profileList.values()) {
         //qDebug() << "Profile" << profile->name() << profile->isSuitableForDisplay() << csf->defaultProfile();
         if (profile->isSuitableForDisplay()) {
-            for (int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+            for (int i = 0; i < QApplication::screens().count(); ++i) {
                 m_monitorProfileWidgets[i]->addSqueezedItem(profile->name());
             }
         }
     }
 
-    for (int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
+    for (int i = 0; i < QApplication::screens().count(); ++i) {
         m_monitorProfileLabels[i]->setText(i18nc("The number of the screen", "Screen %1:", i + 1));
         m_monitorProfileWidgets[i]->setCurrent(KoColorSpaceRegistry::instance()->defaultProfileForColorSpace(colorSpaceId.id()));
     }
@@ -636,8 +723,18 @@ void TabletSettingsTab::setDefault()
     curve.fromString(DEFAULT_CURVE_STRING);
     m_page->pressureCurve->setCurve(curve);
 
-#ifdef Q_OS_WIN
-    if (KisTabletSupportWin8::isAvailable()) {
+    m_page->chkUseRightMiddleClickWorkaround->setChecked(
+        KisConfig(true).useRightMiddleTabletButtonWorkaround(true));
+
+#if defined Q_OS_WIN && (!defined USE_QT_TABLET_WINDOWS || defined QT_HAS_WINTAB_SWITCH)
+
+#ifdef USE_QT_TABLET_WINDOWS
+    // ask Qt if WinInk is actually available
+    const bool isWinInkAvailable = true;
+#else
+    const bool isWinInkAvailable = KisTabletSupportWin8::isAvailable();
+#endif
+    if (isWinInkAvailable) {
         KisConfig cfg(true);
         m_page->radioWintab->setChecked(!cfg.useWin8PointerInput(true));
         m_page->radioWin8PointerInput->setChecked(cfg.useWin8PointerInput(true));
@@ -645,6 +742,8 @@ void TabletSettingsTab::setDefault()
         m_page->radioWintab->setChecked(true);
         m_page->radioWin8PointerInput->setChecked(false);
     }
+#else
+        m_page->grpTabletApi->setVisible(false);
 #endif
 }
 
@@ -664,8 +763,17 @@ TabletSettingsTab::TabletSettingsTab(QWidget* parent, const char* name): QWidget
     m_page->pressureCurve->setMaximumSize(QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX));
     m_page->pressureCurve->setCurve(curve);
 
-#ifdef Q_OS_WIN
-    if (KisTabletSupportWin8::isAvailable()) {
+    m_page->chkUseRightMiddleClickWorkaround->setChecked(
+         cfg.useRightMiddleTabletButtonWorkaround());
+
+#if defined Q_OS_WIN && (!defined USE_QT_TABLET_WINDOWS || defined QT_HAS_WINTAB_SWITCH)
+#ifdef USE_QT_TABLET_WINDOWS
+    // ask Qt if WinInk is actually available
+    const bool isWinInkAvailable = true;
+#else
+    const bool isWinInkAvailable = KisTabletSupportWin8::isAvailable();
+#endif
+    if (isWinInkAvailable) {
         m_page->radioWintab->setChecked(!cfg.useWin8PointerInput());
         m_page->radioWin8PointerInput->setChecked(cfg.useWin8PointerInput());
     } else {
@@ -673,6 +781,15 @@ TabletSettingsTab::TabletSettingsTab(QWidget* parent, const char* name): QWidget
         m_page->radioWin8PointerInput->setChecked(false);
         m_page->grpTabletApi->setVisible(false);
     }
+
+#ifdef USE_QT_TABLET_WINDOWS
+    connect(m_page->btnResolutionSettings, SIGNAL(clicked()), SLOT(slotResolutionSettings()));
+    connect(m_page->radioWintab, SIGNAL(toggled(bool)), m_page->btnResolutionSettings, SLOT(setEnabled(bool)));
+    m_page->btnResolutionSettings->setEnabled(m_page->radioWintab->isChecked());
+#else
+    m_page->btnResolutionSettings->setVisible(false);
+#endif
+
 #else
     m_page->grpTabletApi->setVisible(false);
 #endif
@@ -683,6 +800,18 @@ void TabletSettingsTab::slotTabletTest()
 {
     TabletTestDialog tabletTestDialog(this);
     tabletTestDialog.exec();
+}
+
+#if defined Q_OS_WIN && defined USE_QT_TABLET_WINDOWS
+#include "KisDlgCustomTabletResolution.h"
+#endif
+
+void TabletSettingsTab::slotResolutionSettings()
+{
+#if defined Q_OS_WIN && defined USE_QT_TABLET_WINDOWS
+    KisDlgCustomTabletResolution dlg(this);
+    dlg.exec();
+#endif
 }
 
 
@@ -750,6 +879,7 @@ PerformanceTab::PerformanceTab(QWidget *parent, const char *name)
 
 
     connect(intPoolLimit, SIGNAL(valueChanged(int)), sync3, SLOT(slotParentValueChanged()));
+    connect(intMemoryLimit, SIGNAL(valueChanged(int)), sync3, SLOT(slotParentValueChanged()));
     sync3->slotParentValueChanged();
     m_syncs << sync3;
 
@@ -771,7 +901,7 @@ PerformanceTab::PerformanceTab(QWidget *parent, const char *name)
 
     sliderThreadsLimit->setRange(1, QThread::idealThreadCount());
     sliderFrameClonesLimit->setRange(1, QThread::idealThreadCount());
-    sliderFpsLimit->setRange(20, 100);
+    sliderFpsLimit->setRange(20, 300);
     sliderFpsLimit->setSuffix(i18n(" fps"));
 
     connect(sliderThreadsLimit, SIGNAL(valueChanged(int)), SLOT(slotThreadsLimitChanged(int)));
@@ -789,6 +919,11 @@ PerformanceTab::PerformanceTab(QWidget *parent, const char *name)
 
     connect(chkCachedFramesSizeLimit, SIGNAL(toggled(bool)), intCachedFramesSizeLimit, SLOT(setEnabled(bool)));
     connect(chkUseRegionOfInterest, SIGNAL(toggled(bool)), intRegionOfInterestMargin, SLOT(setEnabled(bool)));
+
+#ifndef Q_OS_WIN
+    // AVX workaround is needed on Windows+GCC only
+    chkDisableAVXOptimizations->setVisible(false);
+#endif
 
     load(false);
 }
@@ -825,6 +960,9 @@ void PerformanceTab::load(bool requestDefault)
         chkOpenGLFramerateLogging->setChecked(cfg2.enableOpenGLFramerateLogging(requestDefault));
         chkBrushSpeedLogging->setChecked(cfg2.enableBrushSpeedLogging(requestDefault));
         chkDisableVectorOptimizations->setChecked(cfg2.enableAmdVectorizationWorkaround(requestDefault));
+#ifdef Q_OS_WIN
+        chkDisableAVXOptimizations->setChecked(cfg2.disableAVXOptimizations(requestDefault));
+#endif
         chkBackgroundCacheGeneration->setChecked(cfg2.calculateAnimationCacheInBackground(requestDefault));
     }
 
@@ -867,6 +1005,9 @@ void PerformanceTab::save()
         cfg2.setEnableOpenGLFramerateLogging(chkOpenGLFramerateLogging->isChecked());
         cfg2.setEnableBrushSpeedLogging(chkBrushSpeedLogging->isChecked());
         cfg2.setEnableAmdVectorizationWorkaround(chkDisableVectorOptimizations->isChecked());
+#ifdef Q_OS_WIN
+        cfg2.setDisableAVXOptimizations(chkDisableAVXOptimizations->isChecked());
+#endif
         cfg2.setCalculateAnimationCacheInBackground(chkBackgroundCacheGeneration->isChecked());
     }
 
@@ -908,6 +1049,38 @@ void PerformanceTab::slotFrameClonesLimitChanged(int value)
 //---------------------------------------------------------------------------------------------------
 
 #include "KoColor.h"
+#include "opengl/KisOpenGLModeProber.h"
+#include "opengl/KisScreenInformationAdapter.h"
+#include <QOpenGLContext>
+#include <QScreen>
+
+QString colorSpaceString(KisSurfaceColorSpace cs, int depth)
+{
+    const QString csString =
+#ifdef HAVE_HDR
+        cs == KisSurfaceColorSpace::bt2020PQColorSpace ? "Rec. 2020 PQ" :
+        cs == KisSurfaceColorSpace::scRGBColorSpace ? "Rec. 709 Linear" :
+#endif
+        cs == KisSurfaceColorSpace::sRGBColorSpace ? "sRGB" :
+        cs == KisSurfaceColorSpace::DefaultColorSpace ? "sRGB" :
+        "Unknown Color Space";
+
+    return QString("%1 (%2 bit)").arg(csString).arg(depth);
+}
+
+int formatToIndex(KisConfig::RootSurfaceFormat fmt)
+{
+    return fmt == KisConfig::BT2020_PQ ? 1 :
+           fmt == KisConfig::BT709_G10 ? 2 :
+           0;
+}
+
+KisConfig::RootSurfaceFormat indexToFormat(int value)
+{
+    return value == 1 ? KisConfig::BT2020_PQ :
+           value == 2 ? KisConfig::BT709_G10 :
+           KisConfig::BT709_G22;
+}
 
 DisplaySettingsTab::DisplaySettingsTab(QWidget *parent, const char *name)
     : WdgDisplaySettings(parent, name)
@@ -915,43 +1088,79 @@ DisplaySettingsTab::DisplaySettingsTab(QWidget *parent, const char *name)
     KisConfig cfg(true);
 
     const QString rendererOpenGLText = i18nc("canvas renderer", "OpenGL");
+    const QString rendererSoftwareText = i18nc("canvas renderer", "Software Renderer (very slow)");
 #ifdef Q_OS_WIN
-    const QString rendererAngleText = i18nc("canvas renderer", "Direct3D 11 via ANGLE");
-    cmbRenderer->clear();
-    QString qtPreferredRendererText;
-    if (KisOpenGL::getQtPreferredOpenGLRenderer() == KisOpenGL::RendererAngle) {
-        qtPreferredRendererText = rendererAngleText;
-    } else {
-        qtPreferredRendererText = rendererOpenGLText;
-    }
-    cmbRenderer->addItem(i18nc("canvas renderer", "Auto (%1)", qtPreferredRendererText), KisOpenGL::RendererAuto);
-    cmbRenderer->setCurrentIndex(0);
-    if (KisOpenGL::getSupportedOpenGLRenderers() & KisOpenGL::RendererDesktopGL) {
-        cmbRenderer->addItem(rendererOpenGLText, KisOpenGL::RendererDesktopGL);
-        if (KisOpenGL::getNextUserOpenGLRendererConfig() == KisOpenGL::RendererDesktopGL) {
-            cmbRenderer->setCurrentIndex(cmbRenderer->count() - 1);
-        }
-    }
-    if (KisOpenGL::getSupportedOpenGLRenderers() & KisOpenGL::RendererAngle) {
-        cmbRenderer->addItem(rendererAngleText, KisOpenGL::RendererAngle);
-        if (KisOpenGL::getNextUserOpenGLRendererConfig() == KisOpenGL::RendererAngle) {
-            cmbRenderer->setCurrentIndex(cmbRenderer->count() - 1);
-        }
-    }
+    const QString rendererOpenGLESText = i18nc("canvas renderer", "Direct3D 11 via ANGLE");
 #else
-    lblRenderer->setEnabled(false);
-    cmbRenderer->setEnabled(false);
-    cmbRenderer->clear();
-    cmbRenderer->addItem(rendererOpenGLText);
-    cmbRenderer->setCurrentIndex(0);
+    const QString rendererOpenGLESText = i18nc("canvas renderer", "OpenGL ES");
+#endif
+
+    const KisOpenGL::OpenGLRenderer renderer = KisOpenGL::getCurrentOpenGLRenderer();
+    lblCurrentRenderer->setText(renderer == KisOpenGL::RendererOpenGLES ? rendererOpenGLESText :
+                                renderer == KisOpenGL::RendererDesktopGL ? rendererOpenGLText :
+                                renderer == KisOpenGL::RendererSoftware ? rendererSoftwareText :
+                                i18nc("canvas renderer", "Unknown"));
+
+    cmbPreferredRenderer->clear();
+
+    const KisOpenGL::OpenGLRenderers supportedRenderers = KisOpenGL::getSupportedOpenGLRenderers();
+    const bool onlyOneRendererSupported =
+        supportedRenderers == KisOpenGL::RendererDesktopGL ||
+        supportedRenderers == KisOpenGL::RendererOpenGLES ||
+        supportedRenderers == KisOpenGL::RendererSoftware;
+
+
+    if (!onlyOneRendererSupported) {
+        QString qtPreferredRendererText;
+        if (KisOpenGL::getQtPreferredOpenGLRenderer() == KisOpenGL::RendererOpenGLES) {
+            qtPreferredRendererText = rendererOpenGLESText;
+        } else if (KisOpenGL::getQtPreferredOpenGLRenderer() == KisOpenGL::RendererSoftware) {
+            qtPreferredRendererText = rendererSoftwareText;
+        } else {
+            qtPreferredRendererText = rendererOpenGLText;
+        }
+        cmbPreferredRenderer->addItem(i18nc("canvas renderer", "Auto (%1)", qtPreferredRendererText), KisOpenGL::RendererAuto);
+        cmbPreferredRenderer->setCurrentIndex(0);
+    } else {
+        cmbPreferredRenderer->setEnabled(false);
+    }
+
+    if (supportedRenderers & KisOpenGL::RendererDesktopGL) {
+        cmbPreferredRenderer->addItem(rendererOpenGLText, KisOpenGL::RendererDesktopGL);
+        if (KisOpenGL::getUserPreferredOpenGLRendererConfig() == KisOpenGL::RendererDesktopGL) {
+            cmbPreferredRenderer->setCurrentIndex(cmbPreferredRenderer->count() - 1);
+        }
+    }
+
+#ifdef Q_OS_ANDROID
+    if (onlyOneRendererSupported) {
+        if (KisOpenGL::getQtPreferredOpenGLRenderer() == KisOpenGL::RendererOpenGLES) {
+            cmbPreferredRenderer->addItem(rendererOpenGLESText, KisOpenGL::RendererOpenGLES);
+            cmbPreferredRenderer->setCurrentIndex(0);
+        }
+    }
 #endif
 
 #ifdef Q_OS_WIN
-    if (!(KisOpenGL::getSupportedOpenGLRenderers() &
-            (KisOpenGL::RendererDesktopGL | KisOpenGL::RendererAngle))) {
-#else
-    if (!KisOpenGL::hasOpenGL()) {
+    if (supportedRenderers & KisOpenGL::RendererOpenGLES) {
+        cmbPreferredRenderer->addItem(rendererOpenGLESText, KisOpenGL::RendererOpenGLES);
+        if (KisOpenGL::getUserPreferredOpenGLRendererConfig() == KisOpenGL::RendererOpenGLES) {
+            cmbPreferredRenderer->setCurrentIndex(cmbPreferredRenderer->count() - 1);
+        }
+    }
+    if (supportedRenderers & KisOpenGL::RendererSoftware) {
+        cmbPreferredRenderer->addItem(rendererSoftwareText, KisOpenGL::RendererSoftware);
+        if (KisOpenGL::getUserPreferredOpenGLRendererConfig() == KisOpenGL::RendererSoftware) {
+            cmbPreferredRenderer->setCurrentIndex(cmbPreferredRenderer->count() - 1);
+        }
+    }
 #endif
+
+    if (!(supportedRenderers &
+          (KisOpenGL::RendererDesktopGL |
+           KisOpenGL::RendererOpenGLES |
+           KisOpenGL::RendererSoftware))) {
+
         grpOpenGL->setEnabled(false);
         grpOpenGL->setChecked(false);
         chkUseTextureBuffer->setEnabled(false);
@@ -972,6 +1181,74 @@ DisplaySettingsTab::DisplaySettingsTab(QWidget *parent, const char *name)
             cmbFilterMode->removeItem(3);
         }
     }
+
+    lblCurrentDisplayFormat->setText("");
+    lblCurrentRootSurfaceFormat->setText("");
+    lblHDRWarning->setText("");
+    cmbPreferedRootSurfaceFormat->addItem(colorSpaceString(KisSurfaceColorSpace::sRGBColorSpace, 8));
+#ifdef HAVE_HDR
+    cmbPreferedRootSurfaceFormat->addItem(colorSpaceString(KisSurfaceColorSpace::bt2020PQColorSpace, 10));
+    cmbPreferedRootSurfaceFormat->addItem(colorSpaceString(KisSurfaceColorSpace::scRGBColorSpace, 16));
+#endif
+    cmbPreferedRootSurfaceFormat->setCurrentIndex(formatToIndex(KisConfig::BT709_G22));
+    slotPreferredSurfaceFormatChanged(cmbPreferedRootSurfaceFormat->currentIndex());
+
+    QOpenGLContext *context = QOpenGLContext::currentContext();
+
+    if (!context) {
+        context = QOpenGLContext::globalShareContext();
+    }
+
+    if (context) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+        QScreen *screen = QGuiApplication::screenAt(rect().center());
+#else
+        QScreen *screen = 0;
+#endif
+        KisScreenInformationAdapter adapter(context);
+        if (screen && adapter.isValid()) {
+            KisScreenInformationAdapter::ScreenInfo info = adapter.infoForScreen(screen);
+            if (info.isValid()) {
+                QStringList toolTip;
+
+                toolTip << i18n("Display Id: %1", info.screen->name());
+                toolTip << i18n("Display Name: %1 %2", info.screen->manufacturer(), info.screen->model());
+                toolTip << i18n("Min Luminance: %1", info.minLuminance);
+                toolTip << i18n("Max Luminance: %1", info.maxLuminance);
+                toolTip << i18n("Max Full Frame Luminance: %1", info.maxFullFrameLuminance);
+                toolTip << i18n("Red Primary: %1, %2", info.redPrimary[0], info.redPrimary[1]);
+                toolTip << i18n("Green Primary: %1, %2", info.greenPrimary[0], info.greenPrimary[1]);
+                toolTip << i18n("Blue Primary: %1, %2", info.bluePrimary[0], info.bluePrimary[1]);
+                toolTip << i18n("White Point: %1, %2", info.whitePoint[0], info.whitePoint[1]);
+
+                lblCurrentDisplayFormat->setToolTip(toolTip.join('\n'));
+                lblCurrentDisplayFormat->setText(colorSpaceString(info.colorSpace, info.bitsPerColor));
+            } else {
+                lblCurrentDisplayFormat->setToolTip("");
+                lblCurrentDisplayFormat->setText(i18n("Unknown"));
+            }
+        } else {
+            lblCurrentDisplayFormat->setToolTip("");
+            lblCurrentDisplayFormat->setText(i18n("Unknown"));
+            qWarning() << "Failed to fetch display info:" << adapter.errorString();
+        }
+
+        const QSurfaceFormat currentFormat = KisOpenGLModeProber::instance()->surfaceformatInUse();
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+        KisSurfaceColorSpace colorSpace = currentFormat.colorSpace();
+#else
+        KisSurfaceColorSpace colorSpace = KisSurfaceColorSpace::DefaultColorSpace;
+#endif
+        lblCurrentRootSurfaceFormat->setText(colorSpaceString(colorSpace, currentFormat.redBufferSize()));
+        cmbPreferedRootSurfaceFormat->setCurrentIndex(formatToIndex(cfg.rootSurfaceFormat()));
+        connect(cmbPreferedRootSurfaceFormat, SIGNAL(currentIndexChanged(int)), SLOT(slotPreferredSurfaceFormatChanged(int)));
+        slotPreferredSurfaceFormatChanged(cmbPreferedRootSurfaceFormat->currentIndex());
+    }
+
+#ifndef HAVE_HDR
+    grpHDRSettings->setVisible(false);
+    tabWidget->removeTab(tabWidget->indexOf(tabHDR));
+#endif
 
     const QStringList openglWarnings = KisOpenGL::getOpenGLWarnings();
     if (openglWarnings.isEmpty()) {
@@ -1033,13 +1310,9 @@ DisplaySettingsTab::DisplaySettingsTab(QWidget *parent, const char *name)
 void DisplaySettingsTab::setDefault()
 {
     KisConfig cfg(true);
-    cmbRenderer->setCurrentIndex(0);
-#ifdef Q_OS_WIN
+    cmbPreferredRenderer->setCurrentIndex(0);
     if (!(KisOpenGL::getSupportedOpenGLRenderers() &
-            (KisOpenGL::RendererDesktopGL | KisOpenGL::RendererAngle))) {
-#else
-    if (!KisOpenGL::hasOpenGL()) {
-#endif
+            (KisOpenGL::RendererDesktopGL | KisOpenGL::RendererOpenGLES))) {
         grpOpenGL->setEnabled(false);
         grpOpenGL->setChecked(false);
         chkUseTextureBuffer->setEnabled(false);
@@ -1058,6 +1331,14 @@ void DisplaySettingsTab::setDefault()
     }
 
     chkMoving->setChecked(cfg.scrollCheckers(true));
+
+    KisImageConfig imageCfg(false);
+    KoColor c;
+    c.fromQColor(imageCfg.selectionOverlayMaskColor(true));
+    c.setOpacity(1.0);
+    btnSelectionOverlayColor->setColor(c);
+    sldSelectionOverlayOpacity->setValue(imageCfg.selectionOverlayMaskColor(true).alphaF());
+
     intCheckSize->setValue(cfg.checkSize(true));
     KoColor ck1(KoColorSpaceRegistry::instance()->rgb8());
     ck1.fromQColor(cfg.checkersColor1(true));
@@ -1078,6 +1359,9 @@ void DisplaySettingsTab::setDefault()
     gridColor.fromQColor(cfg.getPixelGridColor(true));
     pixelGridColorButton->setColor(gridColor);
     pixelGridDrawingThresholdBox->setValue(cfg.getPixelGridDrawingThreshold(true) * 100);
+
+    cmbPreferedRootSurfaceFormat->setCurrentIndex(formatToIndex(KisConfig::BT709_G22));
+    slotPreferredSurfaceFormatChanged(cmbPreferedRootSurfaceFormat->currentIndex());
 }
 
 void DisplaySettingsTab::slotUseOpenGLToggled(bool isChecked)
@@ -1085,6 +1369,32 @@ void DisplaySettingsTab::slotUseOpenGLToggled(bool isChecked)
     chkUseTextureBuffer->setEnabled(isChecked);
     chkDisableVsync->setEnabled(isChecked);
     cmbFilterMode->setEnabled(isChecked);
+}
+
+void DisplaySettingsTab::slotPreferredSurfaceFormatChanged(int index)
+{
+    Q_UNUSED(index);
+
+    QOpenGLContext *context = QOpenGLContext::currentContext();
+    if (context) {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+        QScreen *screen = QGuiApplication::screenAt(rect().center());
+#else
+        QScreen *screen = 0;
+#endif
+        KisScreenInformationAdapter adapter(context);
+        if (adapter.isValid()) {
+            KisScreenInformationAdapter::ScreenInfo info = adapter.infoForScreen(screen);
+            if (info.isValid()) {
+                if (cmbPreferedRootSurfaceFormat->currentIndex() != formatToIndex(KisConfig::BT709_G22) &&
+                    info.colorSpace == KisSurfaceColorSpace::sRGBColorSpace) {
+                    lblHDRWarning->setText(i18n("WARNING: current display doesn't support HDR rendering"));
+                } else {
+                    lblHDRWarning->setText("");
+                }
+            }
+        }
+    }
 }
 
 //---------------------------------------------------------------------------------------------------
@@ -1121,9 +1431,8 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     Q_UNUSED(name);
     setWindowTitle(i18n("Configure Krita"));
     setStandardButtons(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::RestoreDefaults);
-    button(QDialogButtonBox::Ok)->setDefault(true);
 
-    setFaceType(KPageDialog::Tree);
+    setFaceType(KPageDialog::List);
 
     // General
     KoVBox *vbox = new KoVBox();
@@ -1131,6 +1440,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("general");
     page->setHeader(i18n("General"));
     page->setIcon(KisIconUtils::loadIcon("go-home"));
+    m_pages << page;
     addPage(page);
     m_general = new GeneralTab(vbox);
 
@@ -1140,6 +1450,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("shortcuts");
     page->setHeader(i18n("Shortcuts"));
     page->setIcon(KisIconUtils::loadIcon("document-export"));
+    m_pages << page;
     addPage(page);
     m_shortcutSettings = new ShortcutSettingsTab(vbox);
     connect(this, SIGNAL(accepted()), m_shortcutSettings, SLOT(saveChanges()));
@@ -1151,6 +1462,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setHeader(i18n("Canvas Input"));
     page->setObjectName("canvasinput");
     page->setIcon(KisIconUtils::loadIcon("configure"));
+    m_pages << page;
 
     // Display
     vbox = new KoVBox();
@@ -1158,6 +1470,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("display");
     page->setHeader(i18n("Display"));
     page->setIcon(KisIconUtils::loadIcon("preferences-desktop-display"));
+    m_pages << page;
     addPage(page);
     m_displaySettings = new DisplaySettingsTab(vbox);
 
@@ -1167,6 +1480,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("colormanagement");
     page->setHeader(i18n("Color"));
     page->setIcon(KisIconUtils::loadIcon("preferences-desktop-color"));
+    m_pages << page;
     addPage(page);
     m_colorSettings = new ColorSettingsTab(vbox);
 
@@ -1176,6 +1490,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("performance");
     page->setHeader(i18n("Performance"));
     page->setIcon(KisIconUtils::loadIcon("applications-system"));
+    m_pages << page;
     addPage(page);
     m_performanceSettings = new PerformanceTab(vbox);
 
@@ -1185,6 +1500,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("tablet");
     page->setHeader(i18n("Tablet"));
     page->setIcon(KisIconUtils::loadIcon("document-edit"));
+    m_pages << page;
     addPage(page);
     m_tabletSettings = new TabletSettingsTab(vbox);
 
@@ -1194,6 +1510,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("canvasonly");
     page->setHeader(i18n("Canvas-only"));
     page->setIcon(KisIconUtils::loadIcon("folder-pictures"));
+    m_pages << page;
     addPage(page);
     m_fullscreenSettings = new FullscreenSettingsTab(vbox);
 
@@ -1203,7 +1520,7 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     page->setObjectName("author");
     page->setHeader(i18n("Author"));
     page->setIcon(KisIconUtils::loadIcon("im-user"));
-
+    m_pages << page;
 
     QPushButton *restoreDefaultsButton = button(QDialogButtonBox::RestoreDefaults);
     restoreDefaultsButton->setText(i18nc("@action:button", "Restore Defaults"));
@@ -1212,7 +1529,10 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
     connect(this, SIGNAL(rejected()), m_inputConfiguration, SLOT(revertChanges()));
 
     KisPreferenceSetRegistry *preferenceSetRegistry = KisPreferenceSetRegistry::instance();
-    Q_FOREACH (KisAbstractPreferenceSetFactory *preferenceSetFactory, preferenceSetRegistry->values()) {
+    QStringList keys = preferenceSetRegistry->keys();
+    keys.sort();
+    Q_FOREACH(const QString &key, keys) {
+        KisAbstractPreferenceSetFactory *preferenceSetFactory = preferenceSetRegistry->value(key);
         KisPreferenceSet* preferenceSet = preferenceSetFactory->createPreferenceSet();
         vbox = new KoVBox();
         page = new KPageWidgetItem(vbox, preferenceSet->name());
@@ -1226,13 +1546,39 @@ KisDlgPreferences::KisDlgPreferences(QWidget* parent, const char* name)
         connect(this, SIGNAL(accepted()), preferenceSet, SLOT(savePreferences()), Qt::UniqueConnection);
     }
 
-
     connect(restoreDefaultsButton, SIGNAL(clicked(bool)), this, SLOT(slotDefault()));
 
+    KisConfig cfg(true);
+    QString currentPageName = cfg.readEntry<QString>("KisDlgPreferences/CurrentPage");
+    Q_FOREACH(KPageWidgetItem *page, m_pages) {
+        if (page->objectName() == currentPageName) {
+            setCurrentPage(page);
+            break;
+        }
+    }
 }
 
 KisDlgPreferences::~KisDlgPreferences()
 {
+    KisConfig cfg(true);
+    cfg.writeEntry<QString>("KisDlgPreferences/CurrentPage", currentPage()->objectName());
+}
+
+void KisDlgPreferences::showEvent(QShowEvent *event){
+    KPageDialog::showEvent(event);
+    button(QDialogButtonBox::Cancel)->setAutoDefault(false);
+    button(QDialogButtonBox::Ok)->setAutoDefault(false);
+    button(QDialogButtonBox::RestoreDefaults)->setAutoDefault(false);
+    button(QDialogButtonBox::Cancel)->setDefault(false);
+    button(QDialogButtonBox::Ok)->setDefault(false);
+    button(QDialogButtonBox::RestoreDefaults)->setDefault(false);
+}
+
+void KisDlgPreferences::slotButtonClicked(QAbstractButton *button)
+{
+    if (buttonBox()->buttonRole(button) == QDialogButtonBox::RejectRole) {
+        m_cancelClicked = true;
+    }
 }
 
 void KisDlgPreferences::slotDefault()
@@ -1265,133 +1611,163 @@ void KisDlgPreferences::slotDefault()
 
 bool KisDlgPreferences::editPreferences()
 {
-    KisDlgPreferences* dialog;
+    connect(this->buttonBox(), SIGNAL(clicked(QAbstractButton*)), this, SLOT(slotButtonClicked(QAbstractButton*)));
 
-    dialog = new KisDlgPreferences();
-    bool baccept = (dialog->exec() == Accepted);
-    if (baccept) {
+    int retval = exec();
+    Q_UNUSED(retval)
+
+    if (!m_cancelClicked) {
         // General settings
         KisConfig cfg(false);
-        cfg.setNewCursorStyle(dialog->m_general->cursorStyle());
-        cfg.setNewOutlineStyle(dialog->m_general->outlineStyle());
-        cfg.setShowRootLayer(dialog->m_general->showRootLayer());
-        cfg.setShowOutlineWhilePainting(dialog->m_general->showOutlineWhilePainting());
-        cfg.setForceAlwaysFullSizedOutline(!dialog->m_general->m_changeBrushOutline->isChecked());
-        cfg.setSessionOnStartup(dialog->m_general->sessionOnStartup());
-        cfg.setSaveSessionOnQuit(dialog->m_general->saveSessionOnQuit());
+        cfg.setNewCursorStyle(m_general->cursorStyle());
+        cfg.setNewOutlineStyle(m_general->outlineStyle());
+        cfg.setShowRootLayer(m_general->showRootLayer());
+        cfg.setShowOutlineWhilePainting(m_general->showOutlineWhilePainting());
+        cfg.setForceAlwaysFullSizedOutline(!m_general->m_changeBrushOutline->isChecked());
+        cfg.setSessionOnStartup(m_general->sessionOnStartup());
+        cfg.setSaveSessionOnQuit(m_general->saveSessionOnQuit());
 
         KConfigGroup group = KSharedConfig::openConfig()->group("File Dialogs");
-        group.writeEntry("DontUseNativeFileDialog", !dialog->m_general->m_chkNativeFileDialog->isChecked());
+        group.writeEntry("DontUseNativeFileDialog", !m_general->m_chkNativeFileDialog->isChecked());
 
-        cfg.writeEntry<int>("maximumBrushSize", dialog->m_general->intMaxBrushSize->value());
+        cfg.writeEntry<int>("maximumBrushSize", m_general->intMaxBrushSize->value());
 
-        cfg.writeEntry<int>("mdi_viewmode", dialog->m_general->mdiMode());
-        cfg.setMDIBackgroundColor(dialog->m_general->m_mdiColor->color().toQColor());
-        cfg.setMDIBackgroundImage(dialog->m_general->m_backgroundimage->text());
-        cfg.setAutoSaveInterval(dialog->m_general->autoSaveInterval());
-        cfg.setBackupFile(dialog->m_general->m_backupFileCheckBox->isChecked());
-        cfg.setShowCanvasMessages(dialog->m_general->showCanvasMessages());
-        cfg.setCompressKra(dialog->m_general->compressKra());
+        cfg.writeEntry<int>("mdi_viewmode", m_general->mdiMode());
+        cfg.setMDIBackgroundColor(m_general->m_mdiColor->color().toXML());
+        cfg.setMDIBackgroundImage(m_general->m_backgroundimage->text());
+        cfg.setAutoSaveInterval(m_general->autoSaveInterval());
+        cfg.writeEntry("autosavefileshidden", m_general->chkHideAutosaveFiles->isChecked());
+
+        cfg.setBackupFile(m_general->m_backupFileCheckBox->isChecked());
+        cfg.writeEntry("backupfilelocation", m_general->cmbBackupFileLocation->currentIndex());
+        cfg.writeEntry("backupfilesuffix", m_general->txtBackupFileSuffix->text());
+        cfg.writeEntry("numberofbackupfiles", m_general->intNumBackupFiles->value());
+
+        cfg.setShowCanvasMessages(m_general->showCanvasMessages());
+        cfg.setCompressKra(m_general->compressKra());
+        cfg.setUseZip64(m_general->useZip64());
 
         const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
         QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
-        kritarc.setValue("EnableHiDPI", dialog->m_general->m_chkHiDPI->isChecked());
-        kritarc.setValue("EnableSingleApplication", dialog->m_general->m_chkSingleApplication->isChecked());
+        kritarc.setValue("EnableHiDPI", m_general->m_chkHiDPI->isChecked());
+#ifdef HAVE_HIGH_DPI_SCALE_FACTOR_ROUNDING_POLICY
+        kritarc.setValue("EnableHiDPIFractionalScaling", m_general->m_chkHiDPIFractionalScaling->isChecked());
+#endif
+        kritarc.setValue("EnableSingleApplication", m_general->m_chkSingleApplication->isChecked());
+        kritarc.setValue("LogUsage", m_general->chkUsageLogging->isChecked());
 
-        cfg.setToolOptionsInDocker(dialog->m_general->toolOptionsInDocker());
-        cfg.setKineticScrollingGesture(dialog->m_general->kineticScrollingGesture());
-        cfg.setKineticScrollingSensitivity(dialog->m_general->kineticScrollingSensitivity());
-        cfg.setKineticScrollingScrollbar(dialog->m_general->kineticScrollingScrollbar());
-        cfg.setSwitchSelectionCtrlAlt(dialog->m_general->switchSelectionCtrlAlt());
-        cfg.setDisableTouchOnCanvas(!dialog->m_general->chkEnableTouch->isChecked());
-        cfg.setConvertToImageColorspaceOnImport(dialog->m_general->convertToImageColorspaceOnImport());
-        cfg.setUndoStackLimit(dialog->m_general->undoStackSize());
-        cfg.setFavoritePresets(dialog->m_general->favoritePresets());
+        cfg.setToolOptionsInDocker(m_general->toolOptionsInDocker());
+
+        cfg.writeEntry<bool>("useCreamyAlphaDarken", (bool)!m_general->cmbFlowMode->currentIndex());
+
+        cfg.setKineticScrollingEnabled(m_general->kineticScrollingEnabled());
+        cfg.setKineticScrollingGesture(m_general->kineticScrollingGesture());
+        cfg.setKineticScrollingSensitivity(m_general->kineticScrollingSensitivity());
+        cfg.setKineticScrollingHideScrollbars(m_general->kineticScrollingHiddenScrollbars());
+
+        cfg.setSwitchSelectionCtrlAlt(m_general->switchSelectionCtrlAlt());
+        cfg.setDisableTouchOnCanvas(!m_general->chkEnableTouch->isChecked());
+        cfg.setDisableTouchRotation(!m_general->chkEnableTouchRotation->isChecked());
+        cfg.setActivateTransformToolAfterPaste(m_general->chkEnableTranformToolAfterPaste->isChecked());
+        cfg.setConvertToImageColorspaceOnImport(m_general->convertToImageColorspaceOnImport());
+        cfg.setUndoStackLimit(m_general->undoStackSize());
+        cfg.setFavoritePresets(m_general->favoritePresets());
 
         // Color settings
-        cfg.setUseSystemMonitorProfile(dialog->m_colorSettings->m_page->chkUseSystemMonitorProfile->isChecked());
-        for (int i = 0; i < QApplication::desktop()->screenCount(); ++i) {
-            if (dialog->m_colorSettings->m_page->chkUseSystemMonitorProfile->isChecked()) {
-                int currentIndex = dialog->m_colorSettings->m_monitorProfileWidgets[i]->currentIndex();
-                QString monitorid = dialog->m_colorSettings->m_monitorProfileWidgets[i]->itemData(currentIndex).toString();
+        cfg.setUseSystemMonitorProfile(m_colorSettings->m_page->chkUseSystemMonitorProfile->isChecked());
+        for (int i = 0; i < QApplication::screens().count(); ++i) {
+            if (m_colorSettings->m_page->chkUseSystemMonitorProfile->isChecked()) {
+                int currentIndex = m_colorSettings->m_monitorProfileWidgets[i]->currentIndex();
+                QString monitorid = m_colorSettings->m_monitorProfileWidgets[i]->itemData(currentIndex).toString();
                 cfg.setMonitorForScreen(i, monitorid);
             }
             else {
                 cfg.setMonitorProfile(i,
-                                      dialog->m_colorSettings->m_monitorProfileWidgets[i]->itemHighlighted(),
-                                      dialog->m_colorSettings->m_page->chkUseSystemMonitorProfile->isChecked());
+                                      m_colorSettings->m_monitorProfileWidgets[i]->currentUnsqueezedText(),
+                                      m_colorSettings->m_page->chkUseSystemMonitorProfile->isChecked());
             }
         }
-        cfg.setWorkingColorSpace(dialog->m_colorSettings->m_page->cmbWorkingColorSpace->currentItem().id());
+        cfg.setWorkingColorSpace(m_colorSettings->m_page->cmbWorkingColorSpace->currentItem().id());
 
         KisImageConfig cfgImage(false);
-        cfgImage.setDefaultProofingConfig(dialog->m_colorSettings->m_page->proofingSpaceSelector->currentColorSpace(),
-                                          dialog->m_colorSettings->m_page->cmbProofingIntent->currentIndex(),
-                                          dialog->m_colorSettings->m_page->ckbProofBlackPoint->isChecked(),
-                                          dialog->m_colorSettings->m_page->gamutAlarm->color(),
-                                          (double)dialog->m_colorSettings->m_page->sldAdaptationState->value()/20);
-        cfg.setUseBlackPointCompensation(dialog->m_colorSettings->m_page->chkBlackpoint->isChecked());
-        cfg.setAllowLCMSOptimization(dialog->m_colorSettings->m_page->chkAllowLCMSOptimization->isChecked());
-        cfg.setPasteBehaviour(dialog->m_colorSettings->m_pasteBehaviourGroup.checkedId());
-        cfg.setRenderIntent(dialog->m_colorSettings->m_page->cmbMonitorIntent->currentIndex());
+        cfgImage.setDefaultProofingConfig(m_colorSettings->m_page->proofingSpaceSelector->currentColorSpace(),
+                                          m_colorSettings->m_page->cmbProofingIntent->currentIndex(),
+                                          m_colorSettings->m_page->ckbProofBlackPoint->isChecked(),
+                                          m_colorSettings->m_page->gamutAlarm->color(),
+                                          (double)m_colorSettings->m_page->sldAdaptationState->value()/20);
+        cfg.setUseBlackPointCompensation(m_colorSettings->m_page->chkBlackpoint->isChecked());
+        cfg.setAllowLCMSOptimization(m_colorSettings->m_page->chkAllowLCMSOptimization->isChecked());
+        cfg.setForcePaletteColors(m_colorSettings->m_page->chkForcePaletteColor->isChecked());
+        cfg.setPasteBehaviour(m_colorSettings->m_pasteBehaviourGroup.checkedId());
+        cfg.setRenderIntent(m_colorSettings->m_page->cmbMonitorIntent->currentIndex());
 
         // Tablet settings
-        cfg.setPressureTabletCurve( dialog->m_tabletSettings->m_page->pressureCurve->curve().toString() );
-#ifdef Q_OS_WIN
-        if (KisTabletSupportWin8::isAvailable()) {
-            cfg.setUseWin8PointerInput(dialog->m_tabletSettings->m_page->radioWin8PointerInput->isChecked());
+        cfg.setPressureTabletCurve( m_tabletSettings->m_page->pressureCurve->curve().toString() );
+        cfg.setUseRightMiddleTabletButtonWorkaround(
+            m_tabletSettings->m_page->chkUseRightMiddleClickWorkaround->isChecked());
+
+#if defined Q_OS_WIN && (!defined USE_QT_TABLET_WINDOWS || defined QT_HAS_WINTAB_SWITCH)
+#ifdef USE_QT_TABLET_WINDOWS
+        // ask Qt if WinInk is actually available
+        const bool isWinInkAvailable = true;
+#else
+        const bool isWinInkAvailable = KisTabletSupportWin8::isAvailable();
+#endif
+        if (isWinInkAvailable) {
+            cfg.setUseWin8PointerInput(m_tabletSettings->m_page->radioWin8PointerInput->isChecked());
         }
 #endif
 
-        dialog->m_performanceSettings->save();
+        m_performanceSettings->save();
 
-#ifdef Q_OS_WIN
-        {
-            KisOpenGL::OpenGLRenderer renderer = static_cast<KisOpenGL::OpenGLRenderer>(
-                    dialog->m_displaySettings->cmbRenderer->itemData(
-                            dialog->m_displaySettings->cmbRenderer->currentIndex()).toInt());
-            KisOpenGL::setNextUserOpenGLRendererConfig(renderer);
-            const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
-            QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
-            kritarc.setValue("OpenGLRenderer", KisOpenGL::convertOpenGLRendererToConfig(renderer));
-        }
-#endif
-        if (!cfg.useOpenGL() && dialog->m_displaySettings->grpOpenGL->isChecked())
+        if (!cfg.useOpenGL() && m_displaySettings->grpOpenGL->isChecked())
             cfg.setCanvasState("TRY_OPENGL");
-        cfg.setUseOpenGL(dialog->m_displaySettings->grpOpenGL->isChecked());
-        cfg.setUseOpenGLTextureBuffer(dialog->m_displaySettings->chkUseTextureBuffer->isChecked());
-        cfg.setOpenGLFilteringMode(dialog->m_displaySettings->cmbFilterMode->currentIndex());
-        cfg.setDisableVSync(dialog->m_displaySettings->chkDisableVsync->isChecked());
 
-        cfg.setCheckSize(dialog->m_displaySettings->intCheckSize->value());
-        cfg.setScrollingCheckers(dialog->m_displaySettings->chkMoving->isChecked());
-        cfg.setCheckersColor1(dialog->m_displaySettings->colorChecks1->color().toQColor());
-        cfg.setCheckersColor2(dialog->m_displaySettings->colorChecks2->color().toQColor());
-        cfg.setCanvasBorderColor(dialog->m_displaySettings->canvasBorder->color().toQColor());
-        cfg.setHideScrollbars(dialog->m_displaySettings->hideScrollbars->isChecked());
-        KoColor c = dialog->m_displaySettings->btnSelectionOverlayColor->color();
-        c.setOpacity(dialog->m_displaySettings->sldSelectionOverlayOpacity->value());
+        if (m_displaySettings->grpOpenGL->isChecked()) {
+            KisOpenGL::OpenGLRenderer renderer = static_cast<KisOpenGL::OpenGLRenderer>(
+                    m_displaySettings->cmbPreferredRenderer->itemData(
+                            m_displaySettings->cmbPreferredRenderer->currentIndex()).toInt());
+            KisOpenGL::setUserPreferredOpenGLRendererConfig(renderer);
+        } else {
+            KisOpenGL::setUserPreferredOpenGLRendererConfig(KisOpenGL::RendererNone);
+        }
+
+        cfg.setUseOpenGLTextureBuffer(m_displaySettings->chkUseTextureBuffer->isChecked());
+        cfg.setOpenGLFilteringMode(m_displaySettings->cmbFilterMode->currentIndex());
+        cfg.setDisableVSync(m_displaySettings->chkDisableVsync->isChecked());
+        cfg.setRootSurfaceFormat(&kritarc, indexToFormat(m_displaySettings->cmbPreferedRootSurfaceFormat->currentIndex()));
+
+        cfg.setCheckSize(m_displaySettings->intCheckSize->value());
+        cfg.setScrollingCheckers(m_displaySettings->chkMoving->isChecked());
+        cfg.setCheckersColor1(m_displaySettings->colorChecks1->color().toQColor());
+        cfg.setCheckersColor2(m_displaySettings->colorChecks2->color().toQColor());
+        cfg.setCanvasBorderColor(m_displaySettings->canvasBorder->color().toQColor());
+        cfg.setHideScrollbars(m_displaySettings->hideScrollbars->isChecked());
+        KoColor c = m_displaySettings->btnSelectionOverlayColor->color();
+        c.setOpacity(m_displaySettings->sldSelectionOverlayOpacity->value());
         cfgImage.setSelectionOverlayMaskColor(c.toQColor());
-        cfg.setAntialiasCurves(dialog->m_displaySettings->chkCurveAntialiasing->isChecked());
-        cfg.setAntialiasSelectionOutline(dialog->m_displaySettings->chkSelectionOutlineAntialiasing->isChecked());
-        cfg.setShowSingleChannelAsColor(dialog->m_displaySettings->chkChannelsAsColor->isChecked());
-        cfg.setHidePopups(dialog->m_displaySettings->chkHidePopups->isChecked());
+        cfg.setAntialiasCurves(m_displaySettings->chkCurveAntialiasing->isChecked());
+        cfg.setAntialiasSelectionOutline(m_displaySettings->chkSelectionOutlineAntialiasing->isChecked());
+        cfg.setShowSingleChannelAsColor(m_displaySettings->chkChannelsAsColor->isChecked());
+        cfg.setHidePopups(m_displaySettings->chkHidePopups->isChecked());
 
-        cfg.setHideDockersFullscreen(dialog->m_fullscreenSettings->chkDockers->checkState());
-        cfg.setHideMenuFullscreen(dialog->m_fullscreenSettings->chkMenu->checkState());
-        cfg.setHideScrollbarsFullscreen(dialog->m_fullscreenSettings->chkScrollbars->checkState());
-        cfg.setHideStatusbarFullscreen(dialog->m_fullscreenSettings->chkStatusbar->checkState());
-        cfg.setHideTitlebarFullscreen(dialog->m_fullscreenSettings->chkTitlebar->checkState());
-        cfg.setHideToolbarFullscreen(dialog->m_fullscreenSettings->chkToolbar->checkState());
+        cfg.setHideDockersFullscreen(m_fullscreenSettings->chkDockers->checkState());
+        cfg.setHideMenuFullscreen(m_fullscreenSettings->chkMenu->checkState());
+        cfg.setHideScrollbarsFullscreen(m_fullscreenSettings->chkScrollbars->checkState());
+        cfg.setHideStatusbarFullscreen(m_fullscreenSettings->chkStatusbar->checkState());
+        cfg.setHideTitlebarFullscreen(m_fullscreenSettings->chkTitlebar->checkState());
+        cfg.setHideToolbarFullscreen(m_fullscreenSettings->chkToolbar->checkState());
 
-        cfg.setCursorMainColor(dialog->m_general->cursorColorBtutton->color().toQColor());
-        cfg.setPixelGridColor(dialog->m_displaySettings->pixelGridColorButton->color().toQColor());
-        cfg.setPixelGridDrawingThreshold(dialog->m_displaySettings->pixelGridDrawingThresholdBox->value() / 100);
+        cfg.setCursorMainColor(m_general->cursorColorBtutton->color().toQColor());
+        cfg.setPixelGridColor(m_displaySettings->pixelGridColorButton->color().toQColor());
+        cfg.setPixelGridDrawingThreshold(m_displaySettings->pixelGridDrawingThresholdBox->value() / 100);
 
-        dialog->m_authorPage->apply();
+        m_authorPage->apply();
+
+        cfg.logImportantSettings();
 
     }
-    delete dialog;
-    return baccept;
+
+    return !m_cancelClicked;
 }
 

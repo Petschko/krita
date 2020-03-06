@@ -48,6 +48,7 @@ struct RssItem {
     QString title;
     QString link;
     QString description;
+    QString category;
     QString blogName;
     QString blogIcon;
     QDateTime pubDate;
@@ -58,7 +59,7 @@ typedef QList<RssItem> RssItemList;
 class KisNetworkAccessManager;
 
 enum RssRoles { TitleRole = Qt::UserRole + 1, DescriptionRole, LinkRole,
-                PubDateRole, BlogNameRole, BlogIconRole
+                PubDateRole, CategoryRole, BlogNameRole, BlogIconRole
               };
 
 class KRITAUI_EXPORT MultiFeedRssModel : public QAbstractListModel
@@ -68,7 +69,7 @@ class KRITAUI_EXPORT MultiFeedRssModel : public QAbstractListModel
 public:
     explicit MultiFeedRssModel(QObject *parent = 0);
     ~MultiFeedRssModel() override;
-    QHash<int, QByteArray> roleNames() const;
+    QHash<int, QByteArray> roleNames() const override;
     void addFeed(const QString& feed);
     void removeFeed(const QString& feed);
 
@@ -89,6 +90,7 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void articleCountChanged(int arg);
+    void feedDataChanged();
 
 private Q_SLOTS:
     void appendFeedData(QNetworkReply *reply);

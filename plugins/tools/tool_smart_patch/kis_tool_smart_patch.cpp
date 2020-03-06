@@ -31,7 +31,7 @@
 
 #include "kundo2magicstring.h"
 #include "kundo2stack.h"
-#include "kis_transaction_based_command.h"
+#include "commands_new/kis_transaction_based_command.h"
 #include "kis_transaction.h"
 
 #include "kis_processing_applicator.h"
@@ -43,6 +43,7 @@
 #include "libs/image/kis_paint_device_debug_utils.h"
 
 #include "kis_paint_layer.h"
+#include "kis_algebra_2d.h"
 
 QRect patchImage(KisPaintDeviceSP imageDev, KisPaintDeviceSP maskDev, int radius, int accuracy);
 
@@ -121,8 +122,11 @@ void KisToolSmartPatch::deactivatePrimaryAction()
 
 void KisToolSmartPatch::addMaskPath( KoPointerEvent *event )
 {
+    KisCanvas2 *canvas2 = dynamic_cast<KisCanvas2 *>(canvas());
+    const KisCoordinatesConverter *converter = canvas2->coordinatesConverter();
+
     QPointF imagePos = currentImage()->documentToPixel(event->point);
-    QPainterPath currentBrushOutline = brushOutline().translated(imagePos);
+    QPainterPath currentBrushOutline = brushOutline().translated(KisAlgebra2D::alignForZoom(imagePos, converter->effectiveZoom()));
     m_d->maskDevPainter.fillPainterPath(currentBrushOutline);
 
     canvas()->updateCanvas(currentImage()->pixelToDocument(m_d->maskDev->exactBounds()));
@@ -201,7 +205,10 @@ QPainterPath KisToolSmartPatch::getBrushOutlinePath(const QPointF &documentPos,
     QPointF imagePos = currentImage()->documentToPixel(documentPos);
     QPainterPath path = brushOutline();
 
-    return path.translated( imagePos.rx(), imagePos.ry() );
+    KisCanvas2 *canvas2 = dynamic_cast<KisCanvas2 *>(canvas());
+    const KisCoordinatesConverter *converter = canvas2->coordinatesConverter();
+
+    return path.translated(KisAlgebra2D::alignForZoom(imagePos, converter->effectiveZoom()));
 }
 
 void KisToolSmartPatch::requestUpdateOutline(const QPointF &outlineDocPoint, const KoPointerEvent *event)
@@ -217,7 +224,7 @@ void KisToolSmartPatch::requestUpdateOutline(const QPointF &outlineDocPoint, con
     QRectF outlineDocRect = currentImage()->pixelToDocument(outlinePixelRect);
 
     // This adjusted call is needed as we paint with a 3 pixel wide brush and the pen is outside the bounds of the path
-    // Pen uses view coordinates so we have to zoom the document value to match 2 pixel in view coordiates
+    // Pen uses view coordinates so we have to zoom the document value to match 2 pixel in view coordinates
     // See BUG 275829
     qreal zoomX;
     qreal zoomY;
@@ -245,9 +252,8 @@ void KisToolSmartPatch::paint(QPainter &painter, const KoViewConverter &converte
     Q_UNUSED(converter);
 
     painter.save();
-    painter.setCompositionMode(QPainter::RasterOp_SourceXorDestination);
-    painter.setPen(QColor(128, 255, 128));
-    painter.drawPath(pixelToView(m_d->brushOutline));
+    QPainterPath path = pixelToView(m_d->brushOutline);
+    paintToolOutline(&painter, path);
     painter.restore();
 
     painter.save();
@@ -263,7 +269,7 @@ QWidget * KisToolSmartPatch::createOptionWidget()
 {
     KisCanvas2 * kiscanvas = dynamic_cast<KisCanvas2*>(canvas());
 
-    m_d->optionsWidget = new KisToolSmartPatchOptionsWidget(kiscanvas->viewManager()->resourceProvider(), 0);
+    m_d->optionsWidget = new KisToolSmartPatchOptionsWidget(kiscanvas->viewManager()->canvasResourceProvider(), 0);
     m_d->optionsWidget->setObjectName(toolId() + "option widget");
 
     return m_d->optionsWidget;

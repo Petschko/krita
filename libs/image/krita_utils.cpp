@@ -79,7 +79,22 @@ namespace KritaUtils
         return patches;
     }
 
-    QVector<QRect> splitRegionIntoPatches(const QRegion &region, const QSize &patchSize)
+    QVector<QRect> splitRectIntoPatchesTight(const QRect &rc, const QSize &patchSize)
+    {
+        QVector<QRect> patches;
+
+        for (qint32 y = rc.y(); y < rc.y() + rc.height(); y += patchSize.height()) {
+            for (qint32 x = rc.x(); x < rc.x() + rc.width(); x += patchSize.width()) {
+                patches << QRect(x, y,
+                                 qMin(rc.x() + rc.width() - x, patchSize.width()),
+                                 qMin(rc.y() + rc.height() - y, patchSize.height()));
+            }
+        }
+
+        return patches;
+    }
+
+    QVector<QRect> splitRegionIntoPatches(const KisRegion &region, const QSize &patchSize)
     {
         QVector<QRect> patches;
 
@@ -97,8 +112,8 @@ namespace KritaUtils
     }
 
 
-    QRegion KRITAIMAGE_EXPORT splitTriangles(const QPointF &center,
-                                             const QVector<QPointF> &points)
+    KisRegion KRITAIMAGE_EXPORT splitTriangles(const QPointF &center,
+                                               const QVector<QPointF> &points)
     {
 
         Q_ASSERT(points.size());
@@ -122,7 +137,7 @@ namespace KritaUtils
         const int right = totalRect.x() + totalRect.width();
         const int bottom = totalRect.y() + totalRect.height();
 
-        QRegion dirtyRegion;
+        QVector<QRect> dirtyRects;
 
         for (int y = totalRect.y(); y < bottom;) {
             int nextY = qMin((y + step) & ~(step-1), bottom);
@@ -134,7 +149,7 @@ namespace KritaUtils
 
                 Q_FOREACH (const QPolygonF &triangle, triangles) {
                     if(checkInTriangle(rect, triangle)) {
-                        dirtyRegion |= rect;
+                        dirtyRects << rect;
                         break;
                     }
                 }
@@ -143,11 +158,12 @@ namespace KritaUtils
             }
             y = nextY;
         }
-        return dirtyRegion;
+        return KisRegion(std::move(dirtyRects));
     }
 
-    QRegion KRITAIMAGE_EXPORT splitPath(const QPainterPath &path)
+    KisRegion KRITAIMAGE_EXPORT splitPath(const QPainterPath &path)
     {
+        QVector<QRect> dirtyRects;
         QRect totalRect = path.boundingRect().toAlignedRect();
 
         // adjust the rect for antialiasing to work
@@ -156,9 +172,6 @@ namespace KritaUtils
         const int step = 64;
         const int right = totalRect.x() + totalRect.width();
         const int bottom = totalRect.y() + totalRect.height();
-
-        QRegion dirtyRegion;
-
 
         for (int y = totalRect.y(); y < bottom;) {
             int nextY = qMin((y + step) & ~(step-1), bottom);
@@ -169,7 +182,7 @@ namespace KritaUtils
                 QRect rect(x, y, nextX - x, nextY - y);
 
                 if(path.intersects(rect)) {
-                    dirtyRegion |= rect;
+                    dirtyRects << rect;
                 }
 
                 x = nextX;
@@ -177,12 +190,12 @@ namespace KritaUtils
             y = nextY;
         }
 
-        return dirtyRegion;
+        return KisRegion(std::move(dirtyRects));
     }
 
     QString KRITAIMAGE_EXPORT prettyFormatReal(qreal value)
     {
-        return QString("%1").arg(value, 6, 'f', 1);
+        return QLocale().toString(value, 'f', 1);
     }
 
     qreal KRITAIMAGE_EXPORT maxDimensionPortion(const QRectF &bounds, qreal portion, qreal minValue)
@@ -473,6 +486,44 @@ namespace KritaUtils
         } else /* if (dir == Qt::Vertical) */ {
             const int mirrorY = -((rc->y() + rc->height()) - center.y()) + center.y();
             rc->moveTop(mirrorY);
+        }
+    }
+
+    void mirrorPoint(Qt::Orientation dir, const QPoint &center, QPointF *pt)
+    {
+        if (dir == Qt::Horizontal) {
+            pt->rx() = -(pt->x() - qreal(center.x())) + center.x();
+        } else /* if (dir == Qt::Vertical) */ {
+            pt->ry() = -(pt->y() - qreal(center.y())) + center.y();
+        }
+    }
+
+    qreal colorDifference(const QColor &c1, const QColor &c2)
+    {
+        const qreal dr = c1.redF() - c2.redF();
+        const qreal dg = c1.greenF() - c2.greenF();
+        const qreal db = c1.blueF() - c2.blueF();
+
+        return std::sqrt(2 * pow2(dr) + 4 * pow2(dg) + 3 * pow2(db));
+    }
+
+    void dragColor(QColor *color, const QColor &baseColor, qreal threshold)
+    {
+        while (colorDifference(*color, baseColor) < threshold) {
+
+            QColor newColor = *color;
+
+            if (newColor.lightnessF() > baseColor.lightnessF()) {
+                newColor = newColor.lighter(120);
+            } else {
+                newColor = newColor.darker(120);
+            }
+
+            if (newColor == *color) {
+                break;
+            }
+
+            *color = newColor;
         }
     }
 }

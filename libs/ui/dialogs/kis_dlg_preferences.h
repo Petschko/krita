@@ -24,12 +24,14 @@
 
 #include <QWidget>
 #include <QButtonGroup>
+#include <QMap>
+#include <QString>
 
 #include <kpagedialog.h>
 #include <kis_config.h>
 
 #include "kis_global.h"
-#include <squeezedcombobox.h>
+#include <KisSqueezedComboBox.h>
 
 #include "ui_wdggeneralsettings.h"
 #include "ui_wdgdisplaysettings.h"
@@ -83,10 +85,12 @@ public:
     int favoritePresets();
     bool showCanvasMessages();
     bool compressKra();
+    bool useZip64();
     bool toolOptionsInDocker();
+    bool kineticScrollingEnabled();
     int kineticScrollingGesture();
     int kineticScrollingSensitivity();
-    bool kineticScrollingScrollbar();
+    bool kineticScrollingHiddenScrollbars();
     bool switchSelectionCtrlAlt();
     bool convertToImageColorspaceOnImport();
 
@@ -130,7 +134,6 @@ public:
     WdgShortcutSettings  *m_page;
     QScopedPointer<KisActionsSnapshot> m_snapshot;
 
-
 public Q_SLOTS:
     void saveChanges();
     void cancelChanges();
@@ -171,7 +174,7 @@ public:
     WdgColorSettings  *m_page;
     QButtonGroup m_pasteBehaviourGroup;
     QList<QLabel*> m_monitorProfileLabels;
-    QList<SqueezedComboBox*> m_monitorProfileWidgets;
+    QList<KisSqueezedComboBox*> m_monitorProfileWidgets;
 };
 
 //=======================
@@ -194,6 +197,7 @@ public:
 
 private Q_SLOTS:
     void slotTabletTest();
+    void slotResolutionSettings();
 
 public:
     void setDefault();
@@ -276,6 +280,7 @@ public:
     void setDefault();
 protected Q_SLOTS:
     void slotUseOpenGLToggled(bool isChecked);
+    void slotPreferredSurfaceFormatChanged(int index);
 
 public:
 };
@@ -318,15 +323,14 @@ class KisDlgPreferences : public KPageDialog
 
 public:
 
-    static bool editPreferences();
-
-
-protected:
-
     KisDlgPreferences(QWidget *parent = 0, const char *name = 0);
     ~KisDlgPreferences() override;
 
-protected:
+    bool editPreferences();
+
+    void showEvent(QShowEvent *event) override;
+
+private:
 
     GeneralTab *m_general;
     ShortcutSettingsTab  *m_shortcutSettings;
@@ -338,10 +342,16 @@ protected:
     KisInputConfigurationPage *m_inputConfiguration;
     KoConfigAuthorPage *m_authorPage;
 
-protected Q_SLOTS:
+    QList<KPageWidgetItem*> m_pages;
 
+private Q_SLOTS:
+
+    void slotButtonClicked(QAbstractButton *button);
     void slotDefault();
 
+private:
+
+    bool m_cancelClicked {false};
 };
 
 #endif

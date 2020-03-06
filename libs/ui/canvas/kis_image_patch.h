@@ -67,9 +67,9 @@ public:
     QRect patchRect();
 
     /**
-     * Draws an m_interestRect of the patch onto @gc
-     * By the way it fits this rect into @dstRect
-     * @renderHints are directly tranmitted to QPainter
+     * Draws an m_interestRect of the patch onto @p gc
+     * By the way it fits this rect into @p dstRect
+     * @p renderHints are directly transmitted to QPainter
      */
     void drawMe(QPainter &gc,
                 const QRectF &dstRect,
@@ -97,7 +97,7 @@ private:
      * The rect that was requested during creation
      * of the patch. It equals to patchRect withount
      * borders
-     * These borders are introdused for more accurate
+     * These borders are introduced for more accurate
      * smooth scaling to reduce border effects
      * (IN m_image PIXELS, relative to m_image's topLeft);
 

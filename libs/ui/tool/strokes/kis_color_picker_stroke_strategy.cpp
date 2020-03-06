@@ -31,7 +31,8 @@ struct KisColorPickerStrokeStrategy::Private
 };
 
 KisColorPickerStrokeStrategy::KisColorPickerStrokeStrategy(int lod)
-    : m_d(new Private)
+    : KisSimpleStrokeStrategy(QLatin1String("KisColorPickerStrokeStrategy")),
+      m_d(new Private)
 {
     setSupportsWrapAroundMode(true);
     enableJob(KisSimpleStrokeStrategy::JOB_DOSTROKE);
@@ -56,10 +57,9 @@ void KisColorPickerStrokeStrategy::doStrokeCallback(KisStrokeJobData *data)
 
     KoColor color;
     KoColor previous = d->currentColor;
-    bool result = KisToolUtils::pickColor(color, d->dev, d->pt, &previous, m_d->radius, m_d->blend);
-    Q_UNUSED(result);
-
-    emit sigColorUpdated(color);
+    if (KisToolUtils::pickColor(color, d->dev, d->pt, &previous, m_d->radius, m_d->blend) == true) {
+        emit sigColorUpdated(color);
+    }
 }
 
 KisStrokeStrategy* KisColorPickerStrokeStrategy::createLodClone(int levelOfDetail)

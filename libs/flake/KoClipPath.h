@@ -24,12 +24,12 @@
 
 #include <QScopedPointer>
 #include <QList>
+#include <QSharedDataPointer>
 #include <qnamespace.h>
 #include <KoFlakeCoordinateSystem.h>
 
 class KoShape;
 class KoPathShape;
-class KoViewConverter;
 class QPainter;
 class QTransform;
 class QPainterPath;
@@ -80,14 +80,11 @@ public:
     QTransform clipDataTransformation(KoShape *clippedShape) const;
 
     /// Applies the clipping to the given painter
-    static void applyClipping(KoShape *clippedShape, QPainter &painter, const KoViewConverter &converter);
-
-private:
-    KoClipPath(const KoClipPath &rhs);
+    static void applyClipping(KoShape *clippedShape, QPainter &painter);
 
 private:
     class Private;
-    const QScopedPointer<Private> d;
+    QSharedDataPointer<Private> d;
 };
 
 #endif // KOCLIPPATH_H

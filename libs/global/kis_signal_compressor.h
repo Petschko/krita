@@ -22,21 +22,23 @@
 #include <QObject>
 #include "kritaglobal_export.h"
 
-class KisRelaxedTimer;
+#include <QElapsedTimer>
+
+class QTimer;
 
 /**
  * Sets a timer to delay or throttle activation of a Qt slot. One example of
  * where this is used is to limit the amount of expensive redraw activity on the
  * canvas.
  *
- * There are three behaviors to choose from.
+ * There are four behaviors to choose from.
  *
  * POSTPONE resets the timer after each call. Therefore if the calls are made
  * quickly enough, the timer will never be activated.
  *
  * FIRST_ACTIVE_POSTPONE_NEXT emits the first signal and postpones all
- * the other actions the other action like in POSTPONE. This mode is
- * used e.g.  in move/remove layer functionality. If you remove a
+ * the other actions like in POSTPONE. This mode is
+ * used e.g. in move/remove layer functionality. If you remove a
  * single layer, you'll see the result immediately. But if you want to
  * remove multiple layers, you should wait until all the actions are
  * finished.
@@ -67,14 +69,21 @@ public:
         UNDEFINED /* KisSignalCompressor is created without an explicit mode */
     };
 
+    enum SlowHandlerMode {
+        PRECISE_INTERVAL, /* Interval of timeout is forced to \p delay ms, whatever time the handler of timeout() takes */
+        ADDITIVE_INTERVAL /* When the handler of timeout() is slow, the timeout delay is increased to the (delay + handler_time) */
+    };
+
 public:
     KisSignalCompressor();
     KisSignalCompressor(int delay, Mode mode, QObject *parent = 0);
+    KisSignalCompressor(int delay, Mode mode, SlowHandlerMode slowHandlerMode, QObject *parent = 0);
     bool isActive() const;
     void setMode(Mode mode);
-    void setDelay(int delay);
+
 
 public Q_SLOTS:
+    void setDelay(int delay);
     void start();
     void stop();
 
@@ -85,9 +94,16 @@ Q_SIGNALS:
     void timeout();
 
 private:
-    KisRelaxedTimer *m_timer;
-    Mode m_mode;
-    bool m_gotSignals;
+    bool tryEmitOnTick(bool isFromTimer);
+    bool tryEmitSignalSafely();
+
+private:
+    QTimer *m_timer = 0;
+    Mode m_mode = UNDEFINED;
+    SlowHandlerMode m_slowHandlerMode = PRECISE_INTERVAL;
+    bool m_signalsPending = false;
+    QElapsedTimer m_lastEmittedTimer;
+    int m_isEmitting = 0;
 };
 
 #endif /* __KIS_SIGNAL_COMPRESSOR_H */

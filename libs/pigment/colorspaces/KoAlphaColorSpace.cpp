@@ -35,6 +35,7 @@
 #include "KoCompositeOpCopy2.h"
 #include "KoCompositeOpAlphaDarken.h"
 #include "KoCompositeOpBase.h"
+#include "KoCompositeOps.h"
 #include <colorprofiles/KoDummyColorProfile.h>
 
 namespace {
@@ -91,7 +92,7 @@ KoAlphaColorSpaceImpl<_CSTrait>::KoAlphaColorSpaceImpl()
     m_compositeOps << new KoCompositeOpOver<_CSTrait>(this)
                    << new KoCompositeOpErase<_CSTrait>(this)
                    << new KoCompositeOpCopy2<_CSTrait>(this)
-                   << new KoCompositeOpAlphaDarken<_CSTrait>(this)
+                   << createAlphaDarkenCompositeOp<_CSTrait>(this)
                    << new AlphaColorSpaceMultiplyOp<_CSTrait>(this);
 
     Q_FOREACH (KoCompositeOp *op, m_compositeOps) {
@@ -284,8 +285,8 @@ QList<KoColorConversionTransformationFactory *> KoAlphaColorSpaceFactoryImpl<_CS
 {
     QList<KoColorConversionTransformationFactory*> factories;
 
-    factories << new KoColorConversionFromAlphaTransformationFactoryImpl<channels_type>(GrayAColorModelID.id(), Integer8BitsColorDepthID.id(), "gray built-in");
-    factories << new KoColorConversionToAlphaTransformationFactoryImpl<channels_type>(GrayAColorModelID.id(), Integer8BitsColorDepthID.id(), "gray built-in");
+    factories << new KoColorConversionFromAlphaTransformationFactoryImpl<channels_type>(GrayAColorModelID.id(), Integer8BitsColorDepthID.id(), "Gray-D50-elle-V2-srgbtrc.icc");
+    factories << new KoColorConversionToAlphaTransformationFactoryImpl<channels_type>(GrayAColorModelID.id(), Integer8BitsColorDepthID.id(), "Gray-D50-elle-V2-srgbtrc.icc");
 
     factories << new KoColorConversionFromAlphaTransformationFactoryImpl<channels_type>(LABAColorModelID.id(), Integer16BitsColorDepthID.id(), "default");
     factories << new KoColorConversionToAlphaTransformationFactoryImpl<channels_type>(LABAColorModelID.id(), Integer16BitsColorDepthID.id(), "default");

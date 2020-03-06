@@ -1,12 +1,17 @@
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/qtlockedfile
-    ${EXIV2_INCLUDE_DIR}
 )
 
 include_directories(SYSTEM
     ${EIGEN3_INCLUDE_DIR}
     ${OCIO_INCLUDE_DIR}
 )
+
+if (ANDROID)
+    add_definitions(-DQT_OPENGL_ES_3)
+    add_definitions(-DHAS_ONLY_OPENGL_ES)
+    include_directories (${Qt5AndroidExtras_INCLUDE_DIRS})
+endif()
 
 add_subdirectory( tests )
 
@@ -20,7 +25,6 @@ set(kritaui_LIB_SRCS
     canvas/kis_canvas2.cpp
     canvas/kis_canvas_updates_compressor.cpp
     canvas/kis_canvas_controller.cpp
-    canvas/kis_paintop_transformation_connector.cpp
     canvas/kis_display_color_converter.cpp
     canvas/kis_display_filter.cpp
     canvas/kis_exposure_gamma_correction_interface.cpp
@@ -44,7 +48,9 @@ set(kritaui_LIB_SRCS
     canvas/kis_snap_config.cpp
     canvas/kis_snap_line_strategy.cpp
     canvas/KisSnapPointStrategy.cpp
-    dialogs/kis_about_application.cpp
+    canvas/KisSnapPixelStrategy.cpp
+	canvas/KisMirrorAxisConfig.cpp
+	dialogs/kis_about_application.cpp
     dialogs/kis_dlg_adj_layer_props.cc
     dialogs/kis_dlg_adjustment_layer.cc
     dialogs/kis_dlg_filter.cpp
@@ -63,6 +69,7 @@ set(kritaui_LIB_SRCS
     dialogs/kis_delayed_save_dialog.cpp
     dialogs/KisSessionManagerDialog.cpp
     dialogs/KisNewWindowLayoutDialog.cpp
+    dialogs/KisDlgChangeCloneSource.cpp
     flake/kis_node_dummies_graph.cpp
     flake/kis_dummies_facade_base.cpp
     flake/kis_dummies_facade.cpp
@@ -95,11 +102,10 @@ set(kritaui_LIB_SRCS
     kis_categorized_item_delegate.cpp
     kis_clipboard.cc
     kis_config.cc
+    KisOcioConfiguration.cpp
     kis_control_frame.cpp
     kis_composite_ops_model.cc
     kis_paint_ops_model.cpp
-    kis_cursor.cc
-    kis_cursor_cache.cpp
     kis_custom_pattern.cc
     kis_file_layer.cpp
     kis_change_file_layer_command.h
@@ -107,7 +113,6 @@ set(kritaui_LIB_SRCS
     kis_splash_screen.cpp
     kis_filter_manager.cc
     kis_filters_model.cc
-    kis_histogram_view.cc
     KisImageBarrierLockerWithFeedback.cpp
     kis_image_manager.cc
     kis_image_view_converter.cpp
@@ -120,6 +125,7 @@ set(kritaui_LIB_SRCS
     kis_node_juggler_compressed.cpp
     kis_node_selection_adapter.cpp
     kis_node_insertion_adapter.cpp
+    KisNodeDisplayModeAdapter.cpp
     kis_node_model.cpp
     kis_node_filter_proxy_model.cpp
     kis_model_index_converter_base.cpp
@@ -140,6 +146,7 @@ set(kritaui_LIB_SRCS
     KisSelectedShapesProxy.cpp
     kis_selection_decoration.cc
     kis_selection_manager.cc
+    KisSelectionActionsAdapter.cpp
     kis_statusbar.cc
     kis_zoom_manager.cc
     kis_favorite_resource_manager.cpp
@@ -152,6 +159,7 @@ set(kritaui_LIB_SRCS
     kis_multinode_property.cpp
     kis_stopgradient_editor.cpp
     KisWelcomePageWidget.cpp
+    KisChangeCloneLayersCommand.cpp
 
     kisexiv2/kis_exif_io.cpp
     kisexiv2/kis_exiv2.cpp
@@ -166,7 +174,12 @@ set(kritaui_LIB_SRCS
     opengl/kis_opengl_shader_loader.cpp
     opengl/kis_texture_tile_info_pool.cpp
     opengl/KisOpenGLUpdateInfoBuilder.cpp
+    opengl/KisOpenGLModeProber.cpp
+    opengl/KisScreenInformationAdapter.cpp
     kis_fps_decoration.cpp
+
+    tool/KisToolChangesTracker.cpp
+    tool/KisToolChangesTrackerData.cpp
     tool/kis_selection_tool_helper.cpp
     tool/kis_selection_tool_config_widget_helper.cpp
     tool/kis_rectangle_constraint_widget.cpp
@@ -180,6 +193,7 @@ set(kritaui_LIB_SRCS
     tool/kis_tool_freehand_helper.cpp
     tool/kis_tool_multihand_helper.cpp
     tool/kis_figure_painting_tool_helper.cpp
+    tool/KisAsyncronousStrokeUpdateHelper.cpp
     tool/kis_tool_paint.cc
     tool/kis_tool_shape.cc
     tool/kis_tool_ellipse_base.cpp
@@ -199,6 +213,9 @@ set(kritaui_LIB_SRCS
     tool/strokes/KisMaskedFreehandStrokePainter.cpp
     tool/strokes/KisMaskingBrushRenderer.cpp
     tool/strokes/KisMaskingBrushCompositeOpFactory.cpp
+    tool/strokes/move_stroke_strategy.cpp
+    tool/KisSelectionToolFactoryBase.cpp
+    tool/KisToolPaintFactoryBase.cpp
 
     widgets/kis_cmb_composite.cc
     widgets/kis_cmb_contour.cpp
@@ -235,7 +252,6 @@ set(kritaui_LIB_SRCS
     widgets/kis_scratch_pad.cpp
     widgets/kis_scratch_pad_event_filter.cpp
     widgets/kis_preset_selector_strip.cpp
-    widgets/kis_slider_spin_box.cpp
     widgets/KisSelectionPropertySlider.cpp
     widgets/kis_size_group.cpp
     widgets/kis_size_group_p.cpp
@@ -255,9 +271,20 @@ set(kritaui_LIB_SRCS
     widgets/KoDualColorButton.cpp
     widgets/KoStrokeConfigWidget.cpp
     widgets/KoFillConfigWidget.cpp
-    
+    widgets/KisLayerStyleAngleSelector.cpp
+    widgets/KisMemoryReportButton.cpp
+    widgets/KisDitherWidget.cpp
+
+    KisPaletteEditor.cpp
+    dialogs/KisDlgPaletteEditor.cpp
+
+    widgets/KisNewsWidget.cpp
+    widgets/KisGamutMaskToolbar.cpp
 
     utils/kis_document_aware_spin_box_unit_manager.cpp
+    utils/KisSpinBoxSplineUnitConverter.cpp
+    utils/KisClipboardUtil.cpp
+    utils/KisDitherUtil.cpp
 
     input/kis_input_manager.cpp
     input/kis_input_manager_p.cpp
@@ -280,6 +307,7 @@ set(kritaui_LIB_SRCS
     input/kis_select_layer_action.cpp
     input/KisQtWidgetsTweaker.cpp
     input/KisInputActionGroup.cpp
+    input/kis_zoom_and_rotate_action.cpp
 
     operations/kis_operation.cpp
     operations/kis_operation_configuration.cpp
@@ -288,10 +316,10 @@ set(kritaui_LIB_SRCS
     operations/kis_operation_ui_widget.cpp
     operations/kis_filter_selection_operation.cpp
     actions/kis_selection_action_factories.cpp
-    actions/KisPasteActionFactory.cpp
+    actions/KisPasteActionFactories.cpp
+    actions/KisTransformToolActivationCommand.cpp
     input/kis_touch_shortcut.cpp
     kis_document_undo_store.cpp
-    kis_transaction_based_command.cpp
     kis_gui_context_command.cpp
     kis_gui_context_command_p.cpp
     input/kis_tablet_debugger.cpp
@@ -316,19 +344,14 @@ set(kritaui_LIB_SRCS
     canvas/kis_mirror_axis.cpp
 
     kis_abstract_perspective_grid.cpp
-    
+
     KisApplication.cpp
     KisAutoSaveRecoveryDialog.cpp
     KisDetailsPane.cpp
     KisDocument.cpp
     KisCloneDocumentStroke.cpp
-    KisNodeDelegate.cpp
-    kis_node_view_visibility_delegate.cpp
-    KisNodeToolTip.cpp
-    KisNodeView.cpp
     kis_node_view_color_scheme.cpp
     KisImportExportFilter.cpp
-    KisFilterEntry.cpp
     KisImportExportManager.cpp
     KisImportExportUtils.cpp
     kis_async_action_feedback.cpp
@@ -344,6 +367,9 @@ set(kritaui_LIB_SRCS
     KisTemplateTree.cpp
     KisUndoActionsUpdateManager.cpp
     KisView.cpp
+    KisCanvasWindow.cpp
+    KisImportExportErrorCode.cpp
+    KisImportExportAdditionalChecks.cpp
 
     thememanager.cpp
 
@@ -375,18 +401,34 @@ set(kritaui_LIB_SRCS
     KisReferenceImage.cpp
     flake/KisReferenceImagesLayer.cpp
     flake/KisReferenceImagesLayer.h
+    KisMouseClickEater.cpp
+
+    KisDecorationsWrapperLayer.cpp
 )
 
 if(WIN32)
+    # Private headers are needed for:
+    #    * KisDlgCustomTabletResolution
+    #    * KisScreenInformationAdapter
+    include_directories(SYSTEM ${Qt5Gui_PRIVATE_INCLUDE_DIRS})
+
     set(kritaui_LIB_SRCS
         ${kritaui_LIB_SRCS}
-        input/kis_tablet_event.cpp
-        input/wintab/kis_tablet_support_win.cpp
-        input/wintab/kis_screen_size_choice_dialog.cpp
         qtlockedfile/qtlockedfile_win.cpp
-        input/wintab/kis_tablet_support_win8.cpp
-        opengl/kis_opengl_win.cpp
-        )
+    )
+    if (NOT USE_QT_TABLET_WINDOWS)
+        set(kritaui_LIB_SRCS
+            ${kritaui_LIB_SRCS}
+            input/wintab/kis_tablet_support_win.cpp
+            input/wintab/kis_screen_size_choice_dialog.cpp
+            input/wintab/kis_tablet_support_win8.cpp
+            )
+    else()
+        set(kritaui_LIB_SRCS
+            ${kritaui_LIB_SRCS}
+            dialogs/KisDlgCustomTabletResolution.cpp
+            )
+    endif()
 endif()
 
     set(kritaui_LIB_SRCS
@@ -412,21 +454,11 @@ endif()
         input/wintab/drawpile_tablettester/tablettest.cpp
     )
 
-if(UNIX)
+if (UNIX)
     set(kritaui_LIB_SRCS
         ${kritaui_LIB_SRCS}
-        input/kis_tablet_event.cpp
-        input/wintab/kis_tablet_support.cpp
         qtlockedfile/qtlockedfile_unix.cpp
         )
-    if(NOT APPLE)
-        set(kritaui_LIB_SRCS
-            ${kritaui_LIB_SRCS}
-            input/wintab/qxcbconnection_xi2.cpp
-            input/wintab/qxcbconnection.cpp
-            input/wintab/kis_xi2_event_filter.cpp
-            )
-    endif()
 endif()
 
 if(APPLE)
@@ -436,9 +468,14 @@ if(APPLE)
     )
 endif()
 
+if (ANDROID)
+    set (kritaui_LIB_SRCS ${kritaui_LIB_SRCS} KisAndroidFileManager.cpp)
+endif()
+
 ki18n_wrap_ui(kritaui_LIB_SRCS
     widgets/KoFillConfigWidget.ui
     widgets/KoStrokeConfigWidget.ui
+    widgets/KisDitherWidget.ui
     forms/wdgdlgpngimport.ui
     forms/wdgfullscreensettings.ui
     forms/wdgautogradient.ui
@@ -485,6 +522,10 @@ ki18n_wrap_ui(kritaui_LIB_SRCS
     forms/wdgsessionmanager.ui
     forms/wdgnewwindowlayout.ui
     forms/KisWelcomePage.ui
+    forms/WdgDlgPaletteEditor.ui
+    forms/KisNewsPage.ui
+    forms/wdgGamutMaskToolbar.ui
+    forms/wdgchangeclonesource.ui
 
     brushhud/kis_dlg_brush_hud_config.ui
     dialogs/kis_delayed_save_dialog.ui
@@ -508,34 +549,47 @@ ki18n_wrap_ui(kritaui_LIB_SRCS
     layerstyles/WdgStroke.ui
     layerstyles/wdgstylesselector.ui
     layerstyles/wdgTexture.ui
+    layerstyles/wdgKisLayerStyleAngleSelector.ui
 
     wdgsplash.ui
     input/wintab/kis_screen_size_choice_dialog.ui
     input/wintab/drawpile_tablettester/tablettest.ui
+
 )
 
+if(WIN32)
+    if(USE_QT_TABLET_WINDOWS)
+        ki18n_wrap_ui(kritaui_LIB_SRCS
+            dialogs/KisDlgCustomTabletResolution.ui
+        )
+    else()
+        ki18n_wrap_ui(kritaui_LIB_SRCS
+            input/wintab/kis_screen_size_choice_dialog.ui
+        )
+    endif()
+endif()
 
-QT5_WRAP_CPP(kritaui_HEADERS_MOC KisNodePropertyAction_p.h)
 
 add_library(kritaui SHARED ${kritaui_HEADERS_MOC} ${kritaui_LIB_SRCS} )
 generate_export_header(kritaui BASE_NAME kritaui)
 
 target_link_libraries(kritaui KF5::CoreAddons KF5::Completion KF5::I18n KF5::ItemViews Qt5::Network
-                      kritaimpex kritacolor kritaimage kritalibbrush kritawidgets kritawidgetutils ${PNG_LIBRARIES} ${EXIV2_LIBRARIES}
+                      kritaimpex kritacolor kritaimage kritalibbrush kritawidgets kritawidgetutils ${PNG_LIBRARIES} LibExiv2::LibExiv2
 )
+
+if (ANDROID)
+    target_link_libraries(kritaui GLESv3)
+    target_link_libraries(kritaui Qt5::Gui)
+    target_link_libraries(kritaui Qt5::AndroidExtras)
+endif()
 
 if (HAVE_QT_MULTIMEDIA)
     target_link_libraries(kritaui Qt5::Multimedia)
 endif()
 
-if (HAVE_KIO)
-    target_link_libraries(kritaui KF5::KIOCore)
-endif() 
-
-if (NOT WIN32 AND NOT APPLE)
+if (NOT WIN32 AND NOT APPLE AND NOT ANDROID)
   target_link_libraries(kritaui ${X11_X11_LIB}
-                                ${X11_Xinput_LIB}
-                                ${XCB_LIBRARIES})
+                                ${X11_Xinput_LIB})
 endif()
 
 if(APPLE)
@@ -547,7 +601,7 @@ endif ()
 target_link_libraries(kritaui ${OPENEXR_LIBRARIES})
 
 # Add VSync disable workaround
-if(NOT WIN32 AND NOT APPLE)
+if(NOT WIN32 AND NOT APPLE AND NOT ANDROID)
     target_link_libraries(kritaui ${CMAKE_DL_LIBS} Qt5::X11Extras)
 endif()
 

@@ -19,6 +19,7 @@
 
 #include <QPointer>
 #include <QVariant>
+#include <QStringList>
 
 #include <ksharedconfig.h>
 #include <kconfiggroup.h>
@@ -53,7 +54,6 @@
 #include <KoResourceServerProvider.h>
 #include <kis_action_registry.h>
 #include <kis_icon_utils.h>
-#include <KisPart.h>
 
 #include "View.h"
 #include "Document.h"
@@ -206,7 +206,9 @@ QStringList Krita::profiles(const QString &colorModel, const QString &colorDepth
     Q_FOREACH(const KoColorProfile *profile, profiles) {
         profileNames << profile->name();
     }
-    return profileNames.toList();
+    QStringList r = profileNames.toList();
+    r.sort();
+    return r;
 }
 
 bool Krita::addProfile(const QString &profilePath)
@@ -318,14 +320,11 @@ Document* Krita::createDocument(int width, int height, const QString &name, cons
     qc.setAlpha(0);
     KoColor bgColor(qc, cs);
 
-    if (!document->newImage(name, width, height, cs, bgColor, true, 1, "", double(resolution / 72) )) {
-        qDebug() << "Could not create a new image";
+    if (!document->newImage(name, width, height, cs, bgColor, KisConfig::RASTER_LAYER, 1, "", double(resolution / 72) )) {
         return 0;
     }
 
     Q_ASSERT(document->image());
-    qDebug() << document->image()->objectName();
-
     return new Document(document);
 }
 

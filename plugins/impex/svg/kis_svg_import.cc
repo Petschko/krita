@@ -42,7 +42,7 @@ KisSVGImport::~KisSVGImport()
 {
 }
 
-KisImportExportFilter::ConversionStatus KisSVGImport::convert(KisDocument *document, QIODevice *io,  KisPropertiesConfigurationSP configuration)
+KisImportExportErrorCode KisSVGImport::convert(KisDocument *document, QIODevice *io,  KisPropertiesConfigurationSP configuration)
 {
     Q_UNUSED(configuration);
 
@@ -64,13 +64,13 @@ KisImportExportFilter::ConversionStatus KisSVGImport::convert(KisDocument *docum
                                              0, 100000, 1, &okay);
 
         if (!okay) {
-            return KisImportExportFilter::UserCancelled;
+            return ImportExportCodes::Cancelled;
         }
 
         cfg.setPreferredVectorImportResolutionPPI(resolutionPPI);
     }
 
-    const qreal resolution = resolutionPPI / 72.0;
+    const qreal resolution = resolutionPPI;
 
     QSizeF fragmentSize;
     QList<KoShape*> shapes =
@@ -84,7 +84,7 @@ KisImportExportFilter::ConversionStatus KisSVGImport::convert(KisDocument *docum
 
     const KoColorSpace* cs = KoColorSpaceRegistry::instance()->rgb8();
     KisImageSP image = new KisImage(doc->createUndoStore(), imageRect.width(), imageRect.height(), cs, "svg image");
-    image->setResolution(resolution, resolution);
+    image->setResolution(resolution / 72.0, resolution / 72.0);
     doc->setCurrentImage(image);
 
     KisShapeLayerSP shapeLayer =
@@ -97,7 +97,7 @@ KisImportExportFilter::ConversionStatus KisSVGImport::convert(KisDocument *docum
     }
 
     image->addNode(shapeLayer);
-    return KisImportExportFilter::OK;
+    return ImportExportCodes::OK;
 }
 
 #include <kis_svg_import.moc>

@@ -24,8 +24,8 @@
 #include <QTimer>
 #include <kundo2command.h>
 #include <QMimeData>
-
-#include <QTemporaryFile>
+#include <QApplication>
+#include <QThread>
 
 #include <KoShapeStroke.h>
 #include <KoPathShape.h>
@@ -82,6 +82,8 @@ KisShapeSelection::KisShapeSelection(KoShapeControllerBase *shapeControllerBase,
     m_model->moveToThread(image->thread());
     m_canvas->setObjectName("KisShapeSelectionCanvas");
     m_canvas->moveToThread(image->thread());
+
+    connect(this, SIGNAL(sigMoveShapes(QPointF)), SLOT(slotMoveShapes(QPointF)));
 }
 
 KisShapeSelection::~KisShapeSelection()
@@ -98,17 +100,31 @@ KisShapeSelection::KisShapeSelection(const KisShapeSelection& rhs, KisSelection*
     m_shapeControllerBase = rhs.m_shapeControllerBase;
     m_converter = new KisImageViewConverter(m_image);
     m_canvas = new KisShapeSelectionCanvas(m_shapeControllerBase);
-    m_canvas->shapeManager()->addShape(this);
 
+    // TODO: refactor shape selection to pass signals
+    //       via KoShapeManager, not via the model
+    m_canvas->shapeManager()->setUpdatesBlocked(true);
+    m_model->setUpdatesEnabled(false);
+
+    m_canvas->shapeManager()->addShape(this);
     Q_FOREACH (KoShape *shape, rhs.shapes()) {
         KoShape *clonedShape = shape->cloneShape();
         KIS_SAFE_ASSERT_RECOVER(clonedShape) { continue; }
         this->addShape(clonedShape);
     }
+
+    m_canvas->shapeManager()->setUpdatesBlocked(false);
+    m_model->setUpdatesEnabled(true);
 }
 
 KisSelectionComponent* KisShapeSelection::clone(KisSelection* selection)
 {
+    /**
+     * TODO: make cloning of vector selections safe! Right now it crashes
+     * on Windows because of manipulations with timers from non-gui thread.
+     */
+    KIS_SAFE_ASSERT_RECOVER_NOOP(QThread::currentThread() == qApp->thread());
+
     return new KisShapeSelection(*this, selection);
 }
 
@@ -241,7 +257,7 @@ bool KisShapeSelection::updatesEnabled() const
 
 KUndo2Command* KisShapeSelection::resetToEmpty()
 {
-    return new KisTakeAllShapesCommand(this, true);
+    return new KisTakeAllShapesCommand(this, true, false);
 }
 
 bool KisShapeSelection::isEmpty() const
@@ -265,7 +281,7 @@ void KisShapeSelection::recalculateOutlineCache()
 
     QPainterPath outline;
     Q_FOREACH (KoShape * shape, shapesList) {
-        QTransform shapeMatrix = shape->absoluteTransformation(0);
+        QTransform shapeMatrix = shape->absoluteTransformation();
         outline = outline.united(shapeMatrix.map(shape->outline()));
     }
 
@@ -275,10 +291,9 @@ void KisShapeSelection::recalculateOutlineCache()
     m_outline = resolutionMatrix.map(outline);
 }
 
-void KisShapeSelection::paintComponent(QPainter& painter, const KoViewConverter& converter, KoShapePaintingContext &)
+void KisShapeSelection::paintComponent(QPainter& painter, KoShapePaintingContext &) const
 {
     Q_UNUSED(painter);
-    Q_UNUSED(converter);
 }
 
 void KisShapeSelection::renderToProjection(KisPaintDeviceSP projection)
@@ -296,13 +311,23 @@ void KisShapeSelection::renderToProjection(KisPaintDeviceSP projection, const QR
     renderSelection(projection, r);
 }
 
-void KisShapeSelection::renderSelection(KisPaintDeviceSP projection, const QRect& r)
+void KisShapeSelection::renderSelection(KisPaintDeviceSP projection, const QRect& requestedRect)
 {
-    Q_ASSERT(projection);
-    Q_ASSERT(m_image);
+    KIS_SAFE_ASSERT_RECOVER_RETURN(projection);
+    KIS_SAFE_ASSERT_RECOVER_RETURN(m_image);
 
     const qint32 MASK_IMAGE_WIDTH = 256;
     const qint32 MASK_IMAGE_HEIGHT = 256;
+
+    const QPainterPath selectionOutline = outlineCache();
+
+    if (*projection->defaultPixel().data() == OPACITY_TRANSPARENT_U8) {
+        projection->clear(requestedRect);
+    } else {
+        KoColor transparentColor(Qt::transparent, projection->colorSpace());
+        projection->fill(requestedRect, transparentColor);
+    }
+    const QRect r = requestedRect & selectionOutline.boundingRect().toAlignedRect();
 
     QImage polygonMaskImage(MASK_IMAGE_WIDTH, MASK_IMAGE_HEIGHT, QImage::Format_ARGB32);
     QPainter maskPainter(&polygonMaskImage);
@@ -314,7 +339,7 @@ void KisShapeSelection::renderSelection(KisPaintDeviceSP projection, const QRect
 
             maskPainter.fillRect(polygonMaskImage.rect(), Qt::black);
             maskPainter.translate(-x, -y);
-            maskPainter.fillPath(outlineCache(), Qt::white);
+            maskPainter.fillPath(selectionOutline, Qt::white);
             maskPainter.translate(x, y);
 
             qint32 rectWidth = qMin(r.x() + r.width() - x, MASK_IMAGE_WIDTH);
@@ -341,20 +366,22 @@ KisShapeSelectionFactory::KisShapeSelectionFactory()
 
 void KisShapeSelection::moveX(qint32 x)
 {
-    Q_FOREACH (KoShape* shape, shapeManager()->shapes()) {
-        if (shape != this) {
-            QPointF pos = shape->position();
-            shape->setPosition(QPointF(pos.x() + x/m_image->xRes(), pos.y()));
-        }
-    }
+    const QPointF diff(x / m_image->xRes(), 0);
+    emit sigMoveShapes(diff);
 }
 
 void KisShapeSelection::moveY(qint32 y)
 {
+    const QPointF diff(0, y / m_image->yRes());
+    emit sigMoveShapes(diff);
+}
+
+void KisShapeSelection::slotMoveShapes(const QPointF &diff)
+{
     Q_FOREACH (KoShape* shape, shapeManager()->shapes()) {
         if (shape != this) {
             QPointF pos = shape->position();
-            shape->setPosition(QPointF(pos.x(), pos.y() + y/m_image->yRes()));
+            shape->setPosition(pos + diff);
         }
     }
 }
@@ -378,7 +405,7 @@ KUndo2Command* KisShapeSelection::transform(const QTransform &transform) {
         if (dynamic_cast<const KoShapeGroup*>(shape)) {
             newTransformations.append(oldTransform);
         } else {
-            QTransform globalTransform = shape->absoluteTransformation(0);
+            QTransform globalTransform = shape->absoluteTransformation();
             QTransform localTransform = globalTransform * realTransform * globalTransform.inverted();
             newTransformations.append(localTransform*oldTransform);
         }

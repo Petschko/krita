@@ -266,7 +266,7 @@ void KisSelectionTest::testSelectionExactBounds()
 
     QCOMPARE(device->exactBounds(), referenceDeviceRect);
 
-    KisSelectionSP selection = new KisSelection(new KisSelectionDefaultBounds(device, image));
+    KisSelectionSP selection = new KisSelection(new KisSelectionDefaultBounds(device));
 
     quint8 defaultPixel = MAX_SELECTED;
     selection->pixelSelection()->setDefaultPixel(KoColor(&defaultPixel, selection->pixelSelection()->colorSpace()));
@@ -335,6 +335,6 @@ void KisSelectionTest::testOutlineGeneration()
     QVERIFY(isClosed);
 }
 
-QTEST_MAIN(KisSelectionTest)
+KISTEST_MAIN(KisSelectionTest)
 
 

@@ -28,8 +28,8 @@
 #include "KoShapeContainer.h"
 #include "KoShapeManager.h"
 #include <KoRTree.h>
+#include <QMutex>
 #include "kis_thread_safe_signal_compressor.h"
-
 
 class KoCanvasBase;
 class KoShapeGroup;
@@ -40,14 +40,13 @@ class Q_DECL_HIDDEN KoShapeManager::Private
 {
 public:
     Private(KoShapeManager *shapeManager, KoCanvasBase *c)
-        : selection(new KoSelection()),
+        : selection(new KoSelection(shapeManager)),
           canvas(c),
           tree(4, 2),
           q(shapeManager),
           shapeInterface(shapeManager),
-          updateTreeCompressor(100, KisSignalCompressor::FIRST_INACTIVE)
+          updateCompressor(100, KisSignalCompressor::FIRST_ACTIVE)
     {
-        connect(&updateTreeCompressor, SIGNAL(timeout()), q, SLOT(updateTree()));
     }
 
     ~Private() {
@@ -60,55 +59,13 @@ public:
      */
     void updateTree();
 
-    /**
-     * Returns whether the shape should be added to the RTree for collision and ROI
-     * detection.
-     */
-    bool shapeUsedInRenderingTree(KoShape *shape);
+    void forwardCompressedUdpate();
+
 
     /**
      * Recursively detach the shapes from this shape manager
      */
     void unlinkFromShapesRecursively(const QList<KoShape *> &shapes);
-
-    /**
-     * Recursively paints the given group shape to the specified painter
-     * This is needed for filter effects on group shapes where the filter effect
-     * applies to all the children of the group shape at once
-     */
-    static void paintGroup(KoShapeGroup *group, QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintContext);
-
-    class DetectCollision
-    {
-    public:
-        DetectCollision() {}
-        void detect(KoRTree<KoShape *> &tree, KoShape *s, int prevZIndex) {
-            Q_FOREACH (KoShape *shape, tree.intersects(s->boundingRect())) {
-                bool isChild = false;
-                KoShapeContainer *parent = s->parent();
-                while (parent && !isChild) {
-                    if (parent == shape)
-                        isChild = true;
-                    parent = parent->parent();
-                }
-                if (isChild)
-                    continue;
-                if (s->zIndex() <= shape->zIndex() && prevZIndex <= shape->zIndex())
-                    // Moving a shape will only make it collide with shapes below it.
-                    continue;
-                if (shape->collisionDetection() && !shapesWithCollisionDetection.contains(shape))
-                    shapesWithCollisionDetection.append(shape);
-            }
-        }
-
-        void fireSignals() {
-            Q_FOREACH (KoShape *shape, shapesWithCollisionDetection)
-                shape->priv()->shapeChanged(KoShape::CollisionDetected);
-        }
-
-    private:
-        QList<KoShape*> shapesWithCollisionDetection;
-    };
 
     QList<KoShape *> shapes;
     KoSelection *selection;
@@ -118,7 +75,14 @@ public:
     QHash<KoShape*, int> shapeIndexesBeforeUpdate;
     KoShapeManager *q;
     KoShapeManager::ShapeInterface shapeInterface;
-    KisThreadSafeSignalCompressor updateTreeCompressor;
+    QMutex shapesMutex;
+    QMutex treeMutex;
+
+    KisThreadSafeSignalCompressor updateCompressor;
+    QRectF compressedUpdate;
+    QSet<const KoShape*> compressedUpdatedShapes;
+
+    bool updatesBlocked = false;
 };
 
 #endif

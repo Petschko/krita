@@ -274,6 +274,7 @@ typedef KisSharedPtr<KisLockedProperties> KisLockedPropertiesSP;
 
 class KisProjectionUpdatesFilter;
 typedef QSharedPointer<KisProjectionUpdatesFilter> KisProjectionUpdatesFilterSP;
+using KisProjectionUpdatesFilterCookie = void*;
 
 class KisAbstractProjectionPlane;
 typedef QSharedPointer<KisAbstractProjectionPlane> KisAbstractProjectionPlaneSP;
@@ -298,6 +299,9 @@ class KisLayerComposition;
 typedef QSharedPointer<KisLayerComposition> KisLayerCompositionSP;
 typedef QWeakPointer<KisLayerComposition> KisLayerCompositionWSP;
 
+class KisMirrorAxis;
+typedef KisSharedPtr<KisMirrorAxis> KisMirrorAxisSP;
+typedef KisWeakSharedPtr<KisMirrorAxis> KisMirrorAxisWSP;
 
 
 #include <QSharedPointer>

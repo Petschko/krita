@@ -20,7 +20,7 @@
 #ifndef KISREFERENCEIMAGE_H
 #define KISREFERENCEIMAGE_H
 
-#include <QScopedPointer>
+#include <QSharedDataPointer>
 
 #include <kundo2command.h>
 #include <kritaui_export.h>
@@ -63,6 +63,7 @@ public:
      * @return reference image or null if one could not be loaded
      */
     static KisReferenceImage * fromFile(const QString &filename, const KisCoordinatesConverter &converter, QWidget *parent /*= nullptr*/);
+    static KisReferenceImage * fromClipboard(const KisCoordinatesConverter &converter);
 
     void setSaturation(qreal saturation);
     qreal saturation() const;
@@ -75,7 +76,7 @@ public:
     QString filename() const;
     QString internalFile() const;
 
-    void paint(QPainter &gc, const KoViewConverter &converter, KoShapePaintingContext &paintcontext) override;
+    void paint(QPainter &gc, KoShapePaintingContext &paintcontext) const override;
 
     bool loadOdf(const KoXmlElement &/*element*/, KoShapeLoadingContext &/*context*/) override { return false; }
     void saveOdf(KoShapeSavingContext &/*context*/) const override {}
@@ -90,7 +91,7 @@ public:
 
 private:
     struct Private;
-    const QScopedPointer<Private> d;
+    QSharedDataPointer<Private> d;
 };
 
 #endif // KISREFERENCEIMAGE_H

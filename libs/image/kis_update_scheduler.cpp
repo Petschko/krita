@@ -117,16 +117,6 @@ int KisUpdateScheduler::threadsLimit() const
 
 void KisUpdateScheduler::connectSignals()
 {
-    connect(&m_d->updaterContext, SIGNAL(sigContinueUpdate(const QRect&)),
-            SLOT(continueUpdate(const QRect&)),
-            Qt::DirectConnection);
-
-    connect(&m_d->updaterContext, SIGNAL(sigDoSomeUsefulWork()),
-            SLOT(doSomeUsefulWork()), Qt::DirectConnection);
-
-    connect(&m_d->updaterContext, SIGNAL(sigSpareThreadAppeared()),
-            SLOT(spareThreadAppeared()), Qt::DirectConnection);
-
     connect(KisImageConfigNotifier::instance(), SIGNAL(configChanged()),
             SLOT(updateSettings()));
 }
@@ -215,6 +205,11 @@ void KisUpdateScheduler::addSpontaneousJob(KisSpontaneousJob *spontaneousJob)
     processQueues();
 }
 
+bool KisUpdateScheduler::hasUpdatesRunning() const
+{
+    return !m_d->updatesQueue.isEmpty();
+}
+
 KisStrokeId KisUpdateScheduler::startStroke(KisStrokeStrategy *strokeStrategy)
 {
     KisStrokeId id  = m_d->strokesQueue.startStroke(strokeStrategy);
@@ -296,14 +291,9 @@ void KisUpdateScheduler::setLod0ToNStrokeStrategyFactory(const KisLodSyncStrokeS
     m_d->strokesQueue.setLod0ToNStrokeStrategyFactory(factory);
 }
 
-void KisUpdateScheduler::setSuspendUpdatesStrokeStrategyFactory(const KisSuspendResumeStrategyFactory &factory)
+void KisUpdateScheduler::setSuspendResumeUpdatesStrokeStrategyFactory(const KisSuspendResumeStrategyPairFactory &factory)
 {
-    m_d->strokesQueue.setSuspendUpdatesStrokeStrategyFactory(factory);
-}
-
-void KisUpdateScheduler::setResumeUpdatesStrokeStrategyFactory(const KisSuspendResumeStrategyFactory &factory)
-{
-    m_d->strokesQueue.setResumeUpdatesStrokeStrategyFactory(factory);
+    m_d->strokesQueue.setSuspendResumeUpdatesStrokeStrategyFactory(factory);
 }
 
 KisPostExecutionUndoAdapter *KisUpdateScheduler::lodNPostExecutionUndoAdapter() const
@@ -487,14 +477,13 @@ KisTestableUpdateScheduler::KisTestableUpdateScheduler(KisProjectionUpdateListen
     // The queue will update settings in a constructor itself
     // m_d->updatesQueue = new KisTestableSimpleUpdateQueue();
     // m_d->strokesQueue = new KisStrokesQueue();
-    // m_d->updaterContext = new KisTestableUpdaterContext(threadCount);
 
     connectSignals();
 }
 
-KisTestableUpdaterContext* KisTestableUpdateScheduler::updaterContext()
+KisUpdaterContext *KisTestableUpdateScheduler::updaterContext()
 {
-    return dynamic_cast<KisTestableUpdaterContext*>(&m_d->updaterContext);
+    return &m_d->updaterContext;
 }
 
 KisTestableSimpleUpdateQueue* KisTestableUpdateScheduler::updateQueue()

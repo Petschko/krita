@@ -39,7 +39,7 @@
 #include <strokes/KisMaskedFreehandStrokePainter.h>
 
 #include "brushengine/kis_paintop_utils.h"
-
+#include "KisAsyncronousStrokeUpdateHelper.h"
 
 struct FreehandStrokeStrategy::Private
 {
@@ -77,7 +77,7 @@ struct FreehandStrokeStrategy::Private
 FreehandStrokeStrategy::FreehandStrokeStrategy(KisResourcesSnapshotSP resources,
                                                KisFreehandStrokeInfo *strokeInfo,
                                                const KUndo2MagicString &name)
-    : KisPainterBasedStrokeStrategy("FREEHAND_STROKE", name,
+    : KisPainterBasedStrokeStrategy(QLatin1String("FREEHAND_STROKE"), name,
                                     resources, strokeInfo),
       m_d(new Private(resources))
 {
@@ -87,7 +87,7 @@ FreehandStrokeStrategy::FreehandStrokeStrategy(KisResourcesSnapshotSP resources,
 FreehandStrokeStrategy::FreehandStrokeStrategy(KisResourcesSnapshotSP resources,
                                                QVector<KisFreehandStrokeInfo*> strokeInfos,
                                                const KUndo2MagicString &name)
-    : KisPainterBasedStrokeStrategy("FREEHAND_STROKE", name,
+    : KisPainterBasedStrokeStrategy(QLatin1String("FREEHAND_STROKE"), name,
                                     resources, strokeInfos),
       m_d(new Private(resources))
 {
@@ -145,7 +145,9 @@ void FreehandStrokeStrategy::finishStrokeCallback()
 
 void FreehandStrokeStrategy::doStrokeCallback(KisStrokeJobData *data)
 {
-    if (UpdateData *d = dynamic_cast<UpdateData*>(data)) {
+    if (KisAsyncronousStrokeUpdateHelper::UpdateData *d =
+            dynamic_cast<KisAsyncronousStrokeUpdateHelper::UpdateData*>(data)) {
+
         // this job is lod-clonable in contrast to FreehandStrokeRunnableJobDataWithUpdate!
         tryDoUpdate(d->forceUpdate);
 

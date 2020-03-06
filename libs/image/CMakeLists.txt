@@ -4,7 +4,6 @@ add_subdirectory( tiles3 )
 
 include_directories(
     ${CMAKE_CURRENT_BINARY_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/metadata
     ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty
     ${CMAKE_CURRENT_SOURCE_DIR}/brushengine
     ${CMAKE_CURRENT_SOURCE_DIR}/commands
@@ -82,10 +81,10 @@ set(kritaimage_LIB_SRCS
    brushengine/KisStrokeSpeedMeasurer.cpp
    brushengine/KisPaintopSettingsIds.cpp
    commands/kis_deselect_global_selection_command.cpp
+   commands/KisDeselectActiveSelectionCommand.cpp
    commands/kis_image_change_layers_command.cpp
    commands/kis_image_change_visibility_command.cpp
    commands/kis_image_command.cpp
-   commands/kis_image_set_projection_color_space_command.cpp
    commands/kis_image_layer_add_command.cpp
    commands/kis_image_layer_move_command.cpp
    commands/kis_image_layer_remove_command.cpp
@@ -96,7 +95,9 @@ set(kritaimage_LIB_SRCS
    commands/kis_node_opacity_command.cpp
    commands/kis_node_property_list_command.cpp
    commands/kis_reselect_global_selection_command.cpp
+   commands/KisReselectActiveSelectionCommand.cpp
    commands/kis_set_global_selection_command.cpp
+   commands/KisNodeRenameCommand.cpp
    commands_new/kis_saved_commands.cpp
    commands_new/kis_processing_command.cpp
    commands_new/kis_image_resize_command.cpp
@@ -108,12 +109,19 @@ set(kritaimage_LIB_SRCS
    commands_new/kis_switch_current_time_command.cpp
    commands_new/kis_change_projection_color_command.cpp
    commands_new/kis_activate_selection_mask_command.cpp
+   commands_new/kis_transaction_based_command.cpp
+   commands_new/KisHoldUIUpdatesCommand.cpp
+   commands_new/KisChangeChannelFlagsCommand.cpp
+   commands_new/KisChangeChannelLockFlagsCommand.cpp
    processing/kis_do_nothing_processing_visitor.cpp
    processing/kis_simple_processing_visitor.cpp
+   processing/kis_convert_color_space_processing_visitor.cpp
+   processing/kis_assign_profile_processing_visitor.cpp
    processing/kis_crop_processing_visitor.cpp
    processing/kis_crop_selections_processing_visitor.cpp
    processing/kis_transform_processing_visitor.cpp
    processing/kis_mirror_processing_visitor.cpp
+   processing/KisSelectionBasedProcessingHelper.cpp
    filter/kis_filter.cc
    filter/kis_filter_category_ids.cpp
    filter/kis_filter_configuration.cc
@@ -132,6 +140,8 @@ set(kritaimage_LIB_SRCS
    lazybrush/kis_colorize_mask.cpp
    lazybrush/kis_colorize_stroke_strategy.cpp
    KisDelayedUpdateNodeInterface.cpp
+   KisCroppedOriginalLayerInterface.cpp
+   KisDecoratedNodeInterface.cpp
    kis_adjustment_layer.cc
    kis_selection_based_layer.cpp
    kis_node_filter_interface.cpp
@@ -139,9 +149,10 @@ set(kritaimage_LIB_SRCS
    kis_base_node.cpp
    kis_base_processor.cpp
    kis_bookmarked_configuration_manager.cc
+   KisBusyWaitBroker.cpp
+   KisSafeBlockingQueueConnectionProxy.cpp
    kis_node_uuid_info.cpp
    kis_clone_layer.cpp
-   kis_colorspace_convert_visitor.cpp
    kis_config_widget.cpp
    kis_convolution_kernel.cc
    kis_convolution_painter.cc
@@ -173,6 +184,7 @@ set(kritaimage_LIB_SRCS
    kis_stroke_strategy_undo_command_based.cpp
    kis_simple_stroke_strategy.cpp
    KisRunnableBasedStrokeStrategy.cpp
+   KisRunnableStrokeJobDataBase.cpp
    KisRunnableStrokeJobData.cpp
    KisRunnableStrokeJobsInterface.cpp
    KisFakeRunnableStrokeJobsExecutor.cpp
@@ -198,6 +210,7 @@ set(kritaimage_LIB_SRCS
    kis_node_graph_listener.cpp
    kis_image.cc
    kis_image_signal_router.cpp
+   KisImageSignals.cpp
    kis_image_config.cpp
    kis_projection_updates_filter.cpp
    kis_suspend_projection_updates_stroke_strategy.cpp
@@ -212,6 +225,7 @@ set(kritaimage_LIB_SRCS
    kis_layer_utils.cpp
    kis_mask_projection_plane.cpp
    kis_projection_leaf.cpp
+   KisSafeNodeProjectionStore.cpp
    kis_mask.cc
    kis_base_mask_generator.cpp
    kis_rect_mask_generator.cpp
@@ -243,6 +257,7 @@ set(kritaimage_LIB_SRCS
    kis_random_sub_accessor.cpp
    kis_wrapped_random_accessor.cpp
    kis_selection.cc
+   KisSelectionUpdateCompressor.cpp
    kis_selection_mask.cpp
    kis_update_outline_job.cpp
    kis_update_selection_job.cpp
@@ -270,22 +285,7 @@ set(kritaimage_LIB_SRCS
    kis_layer_composition.cpp
    kis_selection_filters.cpp
    KisProofingConfiguration.h
-   metadata/kis_meta_data_entry.cc
-   metadata/kis_meta_data_filter.cc
-   metadata/kis_meta_data_filter_p.cc
-   metadata/kis_meta_data_filter_registry.cc
-   metadata/kis_meta_data_filter_registry_model.cc
-   metadata/kis_meta_data_io_backend.cc
-   metadata/kis_meta_data_merge_strategy.cc
-   metadata/kis_meta_data_merge_strategy_p.cc
-   metadata/kis_meta_data_merge_strategy_registry.cc
-   metadata/kis_meta_data_parser.cc
-   metadata/kis_meta_data_schema.cc
-   metadata/kis_meta_data_schema_registry.cc
-   metadata/kis_meta_data_store.cc
-   metadata/kis_meta_data_type_info.cc
-   metadata/kis_meta_data_validator.cc
-   metadata/kis_meta_data_value.cc
+   KisRecycleProjectionsJob.cpp
 
    kis_keyframe.cpp
    kis_keyframe_channel.cpp
@@ -311,6 +311,7 @@ set(kritaimage_LIB_SRCS
    layerstyles/kis_ls_overlay_filter.cpp
    layerstyles/kis_ls_utils.cpp
    layerstyles/gimp_bump_map.cpp
+   layerstyles/KisLayerStyleKnockoutBlower.cpp
 
    KisProofingConfiguration.cpp
 
@@ -333,14 +334,23 @@ target_link_libraries(kritaimage
     PUBLIC
         kritaversion 
         kritawidgets 
-        kritaglobal kritapsd 
-        kritaodf kritapigment 
+        kritaglobal 
+        kritapsd 
+        kritaodf 
+        kritapigment 
         kritacommand
         kritawidgetutils 
+        kritametadata
         Qt5::Concurrent
 )
 
 target_link_libraries(kritaimage PUBLIC ${Boost_SYSTEM_LIBRARY})
+
+if(NOT HAVE_CXX_ATOMICS_WITHOUT_LIB)
+    if(NOT HAVE_CXX_ATOMICS64_WITHOUT_LIB)
+        target_link_libraries(kritaimage PUBLIC atomic)
+    endif()
+endif()
 
 if(OPENEXR_FOUND)
   target_link_libraries(kritaimage PUBLIC ${OPENEXR_LIBRARIES})
@@ -366,7 +376,6 @@ target_include_directories(kritaimage
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/filter>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/generator>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/layerstyles>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/metadata>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/processing>
 )
 

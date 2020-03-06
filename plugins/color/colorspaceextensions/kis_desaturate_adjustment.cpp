@@ -58,7 +58,7 @@ public:
             g = SCALE_TO_FLOAT(src->green);
             b = SCALE_TO_FLOAT(src->blue);
 
-            // http://www.tannerhelland.com/3643/grayscale-image-algorithm-vb6/
+            // https://www.tannerhelland.com/3643/grayscale-image-algorithm-vb6/
             switch(m_type) {
             case 0: // lightness
             {
@@ -80,7 +80,7 @@ public:
             }
             case 3: // average
             {
-                gray = (r + g + b) / 2;
+                gray = (r + g + b) / 3;
                 break;
             }
             case 4: // min

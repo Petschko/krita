@@ -44,6 +44,9 @@ typedef KisSafeReadList<KisNodeSP> KisSafeReadNodeList;
 #include "kis_projection_leaf.h"
 #include "kis_undo_adapter.h"
 #include "kis_keyframe_channel.h"
+#include "kis_image.h"
+#include "kis_layer_utils.h"
+#include "KisRegion.h"
 
 /**
  *The link between KisProjection and KisImageUpdater
@@ -174,8 +177,9 @@ void KisNode::Private::processDuplicatedClones(const KisNode *srcDuplicationRoot
     }
 }
 
-KisNode::KisNode()
-        : m_d(new Private(this))
+KisNode::KisNode(KisImageWSP image)
+        : KisBaseNode(image),
+          m_d(new Private(this))
 {
     m_d->parent = 0;
     m_d->graphListener = 0;
@@ -267,6 +271,21 @@ KisProjectionLeafSP KisNode::projectionLeaf() const
     return m_d->projectionLeaf;
 }
 
+void KisNode::setImage(KisImageWSP image)
+{
+    KisBaseNode::setImage(image);
+
+    KisNodeSP node = firstChild();
+    while (node) {
+        KisLayerUtils::recursiveApplyNodes(node,
+                                           [image] (KisNodeSP node) {
+                                               node->setImage(image);
+                                           });
+
+        node = node->nextSibling();
+    }
+}
+
 bool KisNode::accept(KisNodeVisitor &v)
 {
     return v.visit(this);
@@ -331,6 +350,7 @@ void KisNode::baseNodeChangedCallback()
 {
     if(m_d->graphListener) {
         m_d->graphListener->nodeChanged(this);
+        emit sigNodeChangedInternal();
     }
 }
 
@@ -338,6 +358,13 @@ void KisNode::baseNodeInvalidateAllFramesCallback()
 {
     if(m_d->graphListener) {
         m_d->graphListener->invalidateAllFrames();
+    }
+}
+
+void KisNode::baseNodeCollapsedChangedCallback()
+{
+    if(m_d->graphListener) {
+        m_d->graphListener->nodeCollapsedChanged(this);
     }
 }
 
@@ -590,7 +617,7 @@ void KisNode::setDirty(const QVector<QRect> &rects)
     }
 }
 
-void KisNode::setDirty(const QRegion &region)
+void KisNode::setDirty(const KisRegion &region)
 {
     setDirty(region.rects());
 }

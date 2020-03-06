@@ -44,7 +44,7 @@ void KisLayerTest::testCreation()
 
     const KoColorSpace * colorSpace = KoColorSpaceRegistry::instance()->rgb8();
     KisImageSP image = new KisImage(0, 512, 512, colorSpace, "layer test");
-    image->lock();
+    image->waitForDone();
 
     KisLayerSP layer = new TestLayer(image, "test", OPACITY_OPAQUE_U8);
     QCOMPARE(layer->name(), QString("test"));
@@ -82,7 +82,7 @@ void KisLayerTest::testOrdering()
 {
     const KoColorSpace * colorSpace = KoColorSpaceRegistry::instance()->rgb8();
     KisImageSP image = new KisImage(0, 512, 512, colorSpace, "layer test");
-    image->lock();
+    image->waitForDone();
 
     KisLayerSP layer1 = new TestLayer(image, "layer1", OPACITY_OPAQUE_U8);
     KisLayerSP layer2 = new TestLayer(image, "layer2", OPACITY_OPAQUE_U8);
@@ -167,7 +167,7 @@ void KisLayerTest::testMoveNode()
 {
     const KoColorSpace * colorSpace = KoColorSpaceRegistry::instance()->rgb8();
     KisImageSP image = new KisImage(0, 512, 512, colorSpace, "layer test");
-    image->lock();
+    image->waitForDone();
 
     KisLayerSP node1 = new TestLayer(image, "layer1", OPACITY_OPAQUE_U8);
     KisLayerSP node2 = new TestLayer(image, "layer2", OPACITY_OPAQUE_U8);
@@ -198,7 +198,7 @@ void KisLayerTest::testMoveLayer()
 {
     const KoColorSpace * colorSpace = KoColorSpaceRegistry::instance()->rgb8();
     KisImageSP image = new KisImage(0, 512, 512, colorSpace, "layer test");
-    image->lock();
+    image->waitForDone();
 
     KisLayerSP node1 = new TestLayer(image, "layer1", OPACITY_OPAQUE_U8);
     KisLayerSP node2 = new TestLayer(image, "layer2", OPACITY_OPAQUE_U8);
@@ -272,8 +272,8 @@ void KisLayerTest::testMasksChangeRect()
     /**
      * KisNode::N_BELOW_FILTHY, KisNode::N_FILTHY_PROJECTION
      * should not be use by the caller, because the walker
-     * shoult not visit these node on a forward way.
-     * So the behavoiur here is undefined.
+     * should not visit these node on a forward way.
+     * So the behavior here is undefined.
      *
      * resultRect = paintLayer1->changeRect(testRect, KisNode::N_BELOW_FILTHY);
      * resultRect = paintLayer1->changeRect(testRect, KisNode::N_FILTHY_PROJECTION);

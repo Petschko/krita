@@ -3,7 +3,8 @@
  *
  *  This library is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
- *  the Free Software Foundation; version 2.1 of the License.
+ *  the Free Software Foundation; version 2 of the License, or
+ *  (at your option) any later version.
  *
  *  This library is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -22,7 +23,6 @@
 #include <QQmlContext>
 #include <QAction>
 #include <QUrl>
-#include <QAction>
 #include <QKeyEvent>
 #include <QApplication>
 
@@ -36,6 +36,7 @@
 #include <KoResourcePaths.h>
 #include <kis_icon.h>
 #include <KoCanvasBase.h>
+#include <KoCanvasController.h>
 #include <KisViewManager.h>
 #include <kis_canvas2.h>
 #include <KisMainWindow.h>
@@ -45,7 +46,6 @@
 #include <KisMimeDatabase.h>
 #include <kis_action_manager.h>
 #include <kis_action.h>
-#include <kis_config.h>
 
 #include <Theme.h>
 #include <Settings.h>
@@ -185,10 +185,14 @@ void TouchDockerDock::slotButtonPressed(const QString &id)
         showFileOpenDialog();
     }
     else if (id == "fileSaveButton" && m_canvas && m_canvas->viewManager() && m_canvas->viewManager()->document()) {
-        bool batchMode = m_canvas->viewManager()->document()->fileBatchMode();
-        m_canvas->viewManager()->document()->setFileBatchMode(true);
-        m_canvas->viewManager()->document()->save(true, 0);
-        m_canvas->viewManager()->document()->setFileBatchMode(batchMode);
+        if(m_canvas->viewManager()->document()->url().isEmpty()) {
+            showFileSaveAsDialog();
+        } else {
+            bool batchMode = m_canvas->viewManager()->document()->fileBatchMode();
+            m_canvas->viewManager()->document()->setFileBatchMode(true);
+            m_canvas->viewManager()->document()->save(true, 0);
+            m_canvas->viewManager()->document()->setFileBatchMode(batchMode);
+        }
     }
     else if (id == "fileSaveAsButton" && m_canvas && m_canvas->viewManager() && m_canvas->viewManager()->document()) {
         showFileSaveAsDialog();
@@ -299,7 +303,13 @@ QAction *TouchDockerDock::action(QString id) const
         if (d->buttonMapping.contains(id)) {
             id = d->buttonMapping[id];
         }
-        return m_canvas->viewManager()->actionManager()->actionByName(id);
+
+        QAction *action = m_canvas->viewManager()->actionManager()->actionByName(id);
+        if (!action) {
+            return m_canvas->canvasController()->actionCollection()->action(id);
+        }
+
+        return action;
     }
     return 0;
 }
@@ -315,10 +325,37 @@ void TouchDockerDock::showFileOpenDialog()
 
 void TouchDockerDock::showFileSaveAsDialog()
 {
-    if (!d->openDialog) {
-        d->openDialog = createDialog("qrc:/saveasdialog.qml");
+    if (!d->saveAsDialog) {
+        d->saveAsDialog = createDialog("qrc:/saveasdialog.qml");
     }
-    d->openDialog->exec();
+    d->saveAsDialog->exec();
+}
+
+void TouchDockerDock::changeEvent(QEvent *event)
+{
+    if (event->type() == QEvent::PaletteChange) {
+        m_quickWidget->setSource(QUrl("qrc:/touchstrip.qml"));
+        event->accept();
+    } else {
+        event->ignore();
+    }
+}
+
+void TouchDockerDock::tabletEvent(QTabletEvent *event)
+{
+#ifdef Q_OS_WIN
+    /**
+     * On Windows (only in WinInk mode), unless we accept the tablet event,
+     * OS will start windows gestures, like click+hold for right click.
+     * It will block any mouse events generation.
+     *
+     * In our own (hacky) implementation, if we accept the event, we block
+     * the gesture, but still generate a fake mouse event.
+     */
+    event->accept();
+#else
+    QDockWidget::tabletEvent(event);
+#endif
 }
 
 KoDialog *TouchDockerDock::createDialog(const QString qml)

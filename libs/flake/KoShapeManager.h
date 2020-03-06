@@ -25,9 +25,13 @@
 #include <QList>
 #include <QObject>
 #include <QSet>
+#include <QRect>
 
 #include "KoFlake.h"
 #include "kritaflake_export.h"
+
+#include <memory>
+#include <vector>
 
 class KoShape;
 class KoSelection;
@@ -35,7 +39,6 @@ class KoViewConverter;
 class KoCanvasBase;
 class KoPointerEvent;
 class KoShapePaintingContext;
-
 
 class QPainter;
 class QPointF;
@@ -110,13 +113,62 @@ public:
     /// return the selection shapes for this shapeManager
     KoSelection *selection() const;
 
+    struct PaintJob {
+        using ShapesStorage = std::vector<std::unique_ptr<KoShape>>;
+        using SharedSafeStorage = std::shared_ptr<ShapesStorage>;
+
+        PaintJob() = default;
+        PaintJob(QRectF _docUpdateRect, QRect _viewUpdateRect)
+            : docUpdateRect(_docUpdateRect),
+              viewUpdateRect(_viewUpdateRect)
+        {
+        }
+
+        QRectF docUpdateRect;
+        QRect viewUpdateRect;
+
+        QList<KoShape*> shapes;
+        SharedSafeStorage allClonedShapes;
+    };
+
+    using PaintJobsList = QList<PaintJob>;
+
+
+    /**
+     * Prepare a shallow copy of all the shapes and the jobs to be rendered
+     * asynchronoursly later. The copies are stored in jobs, so that the user
+     * could later pass these jobs into paintJob() in a separate thread.
+     *
+     * @param jobs a list of rects that are going to be updated. docUpdateRect
+     *             and viewUpdateRect should be preinitialized by the caller.
+     * @param excludeRoot the root shape which should not be copied. It is basically
+     *                    a hack to avoid copying of KisShapeLayer, which is not
+     *                    copiable.
+     * \see paintJob()
+     * \see a comment in KisShapeLayerCanvas::slotStartAsyncRepaint()
+     */
+    void preparePaintJobs(PaintJobsList &jobs, KoShape *excludeRoot);
+
+    /**
+     * Render a \p job on \p painter. No mutable internals of the shape
+     * manager are accessed, so calling this method is safe in multithreading
+     * environment.
+     *
+     * @param painter a painter to paint on. Clip rect of the painter is expected to be setup correctly.
+     * @param job a job to paint.
+     * @param forPrint not used in Krita.
+     *
+     * \see preparePaintJobs
+     */
+    void paintJob(QPainter &painter, const KoShapeManager::PaintJob &job, bool forPrint);
+
     /**
      * Paint all shapes and their selection handles etc.
      * @param painter the painter to paint to.
      * @param forPrint if true, make sure only actual content is drawn and no decorations.
      * @param converter to convert between document and view coordinates.
      */
-    void paint(QPainter &painter, const KoViewConverter &converter, bool forPrint);
+    void paint(QPainter &painter, bool forPrint);
 
     /**
      * Returns the shape located at a specific point in the document.
@@ -131,7 +183,8 @@ public:
     /**
      * Returns the shapes which intersects the specific rect in the document.
      * @param rect the rectangle in the document coordinate system.
-     * @param omitHiddenShapes if true, only visible shapes are considered
+     * @param omitHiddenShapes if @c true, only visible shapes are considered
+     * @param containedMode if @c true use contained mode
      */
     QList<KoShape *> shapesAt(const QRectF &rect, bool omitHiddenShapes = true, bool containedMode = false);
 
@@ -150,6 +203,17 @@ public:
     void update(const QRectF &rect, const KoShape *shape = 0, bool selectionHandles = false);
 
     /**
+     * Block all updates initiated with update() call. The incoming updates will
+     * be dropped completely.
+     */
+    void setUpdatesBlocked(bool value);
+
+    /**
+     * \see setUpdatesBlocked()
+     */
+    bool updatesBlocked() const;
+
+    /**
      * Update the tree for finding the shapes.
      * This will remove the shape from the tree and will reinsert it again.
      * The update to the tree will be posponed until it is needed so that successive calls
@@ -159,19 +223,10 @@ public:
     void notifyShapeChanged(KoShape *shape);
 
     /**
-     * Paint a shape
-     *
-     * @param shape the shape to paint
-     * @param painter the painter to paint to.
-     * @param converter to convert between document and view coordinates.
-     */
-    static void paintShape(KoShape *shape, QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintContext);
-
-    /**
      * @brief renderSingleShape renders a shape on \p painter. This method includes all the
      * needed steps for painting a single shape: setting transformations, clipping and masking.
      */
-    static void renderSingleShape(KoShape *shape, QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintContext);
+    static void renderSingleShape(KoShape *shape, QPainter &painter, KoShapePaintingContext &paintContext);
 
     /**
      * A special interface for KoShape to use during shape destruction. Don't use this
@@ -208,6 +263,7 @@ private:
     class Private;
     Private * const d;
     Q_PRIVATE_SLOT(d, void updateTree())
+    Q_PRIVATE_SLOT(d, void forwardCompressedUdpate())
 };
 
 #endif

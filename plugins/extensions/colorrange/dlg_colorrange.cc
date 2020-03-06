@@ -156,7 +156,8 @@ void DlgColorRange::slotSelectClicked()
     KisPaintDeviceSP device = m_viewManager->activeDevice();
     KIS_ASSERT_RECOVER_RETURN(device);
 
-    QRect rc = device->exactBounds();
+    QRect rc = m_viewManager->image()->bounds();
+
     if (rc.isEmpty()) return;
 
     QApplication::setOverrideCursor(KisCursor::waitCursor());
@@ -193,7 +194,7 @@ void DlgColorRange::slotSelectClicked()
 
     int fuzziness = m_page->intFuzziness->value();
 
-    KisSelectionSP selection = new KisSelection(new KisSelectionDefaultBounds(m_viewManager->activeDevice(), m_viewManager->image()));
+    KisSelectionSP selection = new KisSelection(new KisSelectionDefaultBounds(m_viewManager->activeDevice()));
 
     KisHLineConstIteratorSP hiter = m_viewManager->activeDevice()->createHLineConstIteratorNG(x, y, w);
     KisHLineIteratorSP selIter = selection->pixelSelection()->createHLineIteratorNG(x, y, w);

@@ -104,7 +104,7 @@ void KisConstrainedRect::moveHandle(HandleType handle, const QPoint &offset, con
         break;
     case Creation:
         baseSizeCoeff = 0;
-        /* Falls through */
+        Q_FALLTHROUGH();
     case LowerRight:
         xSizeCoeff =  1;
         ySizeCoeff =  1;
@@ -191,6 +191,28 @@ void KisConstrainedRect::moveHandle(HandleType handle, const QPoint &offset, con
         newOffset = oldRect.topLeft() + offsetDiff;
     } else {
         newOffset = oldRect.topLeft() + offset;
+    }
+
+    QPoint prevOffset = newOffset;
+
+    if (!m_canGrow) {
+        if (newOffset.x() + newSize.width() > m_cropRect.width()) {
+            newOffset.setX(m_cropRect.width() - newSize.width());
+        }
+
+        if (newOffset.y() + newSize.height() > m_cropRect.height()) {
+            newOffset.setY(m_cropRect.height() - newSize.height());
+        }
+        if (newOffset.x() < m_cropRect.x()) {
+            newOffset.setX(m_cropRect.x());
+        }
+        if (newOffset.y() < m_cropRect.y()) {
+            newOffset.setY(m_cropRect.y());
+        }
+    }
+
+    if (!m_ratioLocked && !useMoveOnly) {
+        newOffset = prevOffset;
     }
 
     m_rect = QRect(newOffset, newSize);

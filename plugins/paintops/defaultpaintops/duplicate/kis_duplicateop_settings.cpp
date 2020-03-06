@@ -40,7 +40,7 @@
 #include <kis_dom_utils.h>
 
 KisDuplicateOpSettings::KisDuplicateOpSettings()
-    : m_isOffsetNotUptodate(false)
+    : m_isOffsetNotUptodate(false), m_duringPaintingStroke(false)
 {
 }
 
@@ -81,15 +81,25 @@ bool KisDuplicateOpSettings::mousePressEvent(const KisPaintInformation &info, Qt
         ignoreEvent = false;
     }
     else {
-        if (m_isOffsetNotUptodate) {
+        bool resetOrigin = getBool(DUPLICATE_RESET_SOURCE_POINT);
+        if (m_isOffsetNotUptodate || resetOrigin) {
             m_offset = info.pos() - m_position;
             m_isOffsetNotUptodate = false;
         }
+        m_duringPaintingStroke = true;
         ignoreEvent = true;
     }
 
     return ignoreEvent;
 }
+
+bool KisDuplicateOpSettings::mouseReleaseEvent()
+{
+    m_duringPaintingStroke = false;
+    bool ignoreEvent = true;
+    return ignoreEvent;
+}
+
 
 KisNodeWSP KisDuplicateOpSettings::sourceNode() const
 {
@@ -124,15 +134,17 @@ void KisDuplicateOpSettings::toXML(QDomDocument& doc, QDomElement& rootElt) cons
 KisPaintOpSettingsSP KisDuplicateOpSettings::clone() const
 {
     KisPaintOpSettingsSP setting = KisBrushBasedPaintOpSettings::clone();
-    KisDuplicateOpSettings* s = dynamic_cast<KisDuplicateOpSettings*>(setting.data());
+    KisDuplicateOpSettings* s = static_cast<KisDuplicateOpSettings*>(setting.data());
     s->m_offset = m_offset;
     s->m_isOffsetNotUptodate = m_isOffsetNotUptodate;
     s->m_position = m_position;
+    s->m_sourceNode = m_sourceNode;
+    s->m_duringPaintingStroke = m_duringPaintingStroke;
 
     return setting;
 }
 
-QPainterPath KisDuplicateOpSettings::brushOutline(const KisPaintInformation &info, const OutlineMode &mode)
+QPainterPath KisDuplicateOpSettings::brushOutline(const KisPaintInformation &info, const OutlineMode &mode, qreal alignForZoom)
 {
     QPainterPath path;
 
@@ -144,11 +156,15 @@ QPainterPath KisDuplicateOpSettings::brushOutline(const KisPaintInformation &inf
     }
 
     // clone tool should always show an outline
-    path = KisBrushBasedPaintOpSettings::brushOutlineImpl(info, forcedMode, 1.0);
+    path = KisBrushBasedPaintOpSettings::brushOutlineImpl(info, forcedMode, alignForZoom, 1.0);
 
     QPainterPath copy(path);
     QRectF rect2 = copy.boundingRect();
-    if (m_isOffsetNotUptodate || !getBool(DUPLICATE_MOVE_SOURCE_POINT)) {
+    bool shouldStayInOrigin = m_isOffsetNotUptodate // the clone brush right now waits for first stroke with a new origin, so stays at origin point
+            || !getBool(DUPLICATE_MOVE_SOURCE_POINT) // the brush always use the same source point, so stays at origin point
+            || (!m_duringPaintingStroke && getBool(DUPLICATE_RESET_SOURCE_POINT)); // during the stroke, with reset Origin selected, outline should stay at origin point
+
+    if (shouldStayInOrigin) {
         copy.translate(m_position - info.pos());
     }
     else {
@@ -174,7 +190,6 @@ QPainterPath KisDuplicateOpSettings::brushOutline(const KisPaintInformation &inf
 #include <brushengine/kis_uniform_paintop_property.h>
 #include "kis_paintop_preset.h"
 #include "kis_paintop_settings_update_proxy.h"
-#include "kis_duplicateop_option.h"
 #include "kis_standard_uniform_properties_factory.h"
 
 

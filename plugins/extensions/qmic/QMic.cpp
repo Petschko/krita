@@ -61,6 +61,7 @@
 #include "kis_qmic_simple_convertor.h"
 #include "kis_import_qmic_processing_visitor.h"
 #include <PluginSettings.h>
+#include <kis_image_barrier_locker.h>
 
 #include "kis_qmic_applicator.h"
 
@@ -88,7 +89,7 @@ QMic::QMic(QObject *parent, const QVariantList &)
     connect(m_againAction,  SIGNAL(triggered()), this, SLOT(slotQMicAgain()));
 
     m_gmicApplicator = new KisQmicApplicator();
-    connect(m_gmicApplicator, SIGNAL(gmicFinished(bool, int, QString)), this, SLOT(slotGmicFinished(bool, int, QString)));
+    connect(m_gmicApplicator, SIGNAL(gmicFinished(bool,int,QString)), this, SLOT(slotGmicFinished(bool,int,QString)));
 #endif
 }
 
@@ -131,9 +132,9 @@ void QMic::slotQMic(bool again)
     m_localServer->listen(m_key);
     connect(m_localServer, SIGNAL(newConnection()), SLOT(connected()));
     m_pluginProcess = new QProcess(this);
-    connect(viewManager(), SIGNAL(destroyed(QObject *o)), m_pluginProcess, SLOT(terminate()));
+    connect(viewManager(), SIGNAL(destroyed(QObject*)), m_pluginProcess, SLOT(terminate()));
     m_pluginProcess->setProcessChannelMode(QProcess::ForwardedChannels);
-    connect(m_pluginProcess, SIGNAL(finished(int, QProcess::ExitStatus)), this, SLOT(pluginFinished(int,QProcess::ExitStatus)));
+    connect(m_pluginProcess, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(pluginFinished(int,QProcess::ExitStatus)));
     connect(m_pluginProcess, SIGNAL(stateChanged(QProcess::ProcessState)), this, SLOT(pluginStateChanged(QProcess::ProcessState)));
     m_pluginProcess->start(pluginPath, QStringList() << m_key << (again ? QString(" reapply") : QString()));
 
@@ -337,7 +338,7 @@ void QMic::slotStartApplicator(QStringList gmicImages)
 
     Q_FOREACH(const QString &image, gmicImages) {
         QStringList parts = image.split(',', QString::SkipEmptyParts);
-        Q_ASSERT(parts.size() == 4);
+        KIS_SAFE_ASSERT_RECOVER_BREAK(parts.size() == 5);
         QString key = parts[0];
         QString layerName = QByteArray::fromHex(parts[1].toLatin1());
         int spectrum = parts[2].toInt();
@@ -352,7 +353,7 @@ void QMic::slotStartApplicator(QStringList gmicImages)
         }
         if (m.isAttached()) {
             if (!m.lock()) {
-                dbgPlugins << "Could not lock memeory segment"  << m.error() << m.errorString();
+                dbgPlugins << "Could not lock memory segment"  << m.error() << m.errorString();
             }
             dbgPlugins << "Memory segment" << key << m.size() << m.constData() << m.data();
             gmic_image<float> *gimg = new gmic_image<float>();
@@ -366,10 +367,10 @@ void QMic::slotStartApplicator(QStringList gmicImages)
             dbgPlugins << "created gmic image" << gimg->name << gimg->_width << gimg->_height;
 
             if (!m.unlock()) {
-                dbgPlugins << "Could not unlock memeory segment"  << m.error() << m.errorString();
+                dbgPlugins << "Could not unlock memory segment"  << m.error() << m.errorString();
             }
             if (!m.detach()) {
-                dbgPlugins << "Could not detach from memeory segment"  << m.error() << m.errorString();
+                dbgPlugins << "Could not detach from memory segment"  << m.error() << m.errorString();
             }
             images.append(gimg);
         }
@@ -385,14 +386,13 @@ void QMic::slotStartApplicator(QStringList gmicImages)
 
     m_gmicApplicator->setProperties(viewManager()->image(), rootNode, images, actionName, layers);
     m_gmicApplicator->apply();
-    m_gmicApplicator->finish();
 }
 
 bool QMic::prepareCroppedImages(QByteArray *message, QRectF &rc, int inputMode)
 {
     if (!viewManager()) return false;
 
-    viewManager()->image()->lock();
+    KisImageBarrierLocker locker(viewManager()->image());
 
     m_inputMode = (InputLayerMode)inputMode;
 
@@ -401,7 +401,6 @@ bool QMic::prepareCroppedImages(QByteArray *message, QRectF &rc, int inputMode)
     KisInputOutputMapper mapper(viewManager()->image(), viewManager()->activeNode());
     KisNodeListSP nodes = mapper.inputNodes(m_inputMode);
     if (nodes->isEmpty()) {
-        viewManager()->image()->unlock();
         return false;
     }
 
@@ -454,8 +453,6 @@ bool QMic::prepareCroppedImages(QByteArray *message, QRectF &rc, int inputMode)
     }
 
     dbgPlugins << QString::fromUtf8(*message);
-
-    viewManager()->image()->unlock();
 
     return true;
 }

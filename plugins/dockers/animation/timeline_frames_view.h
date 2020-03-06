@@ -22,6 +22,7 @@
 
 #include <QScopedPointer>
 #include <QTableView>
+#include <QScroller>
 #include "kis_action_manager.h"
 #include "kritaanimationdocker_export.h"
 
@@ -136,6 +137,9 @@ private Q_SLOTS:
     void slotUpdateAudioActions();
     void slotAudioVolumeChanged(int value);
 
+    // DragScroll
+    void slotScrollerStateChanged(QScroller::State state);
+
 private:
     void setFramesPerSecond(int fps);
 
@@ -160,18 +164,6 @@ private:
     void createFrameEditingMenuActions(QMenu *menu, bool addFrameCreationActions);
 
     QModelIndexList calculateSelectionSpan(bool entireColumn, bool editableOnly = true) const;
-
-    int defaultNumberOfFramesToAdd() const;
-    void setDefaultNumberOfFramesToAdd(int value) const;
-
-    int defaultNumberOfColumnsToAdd() const;
-    void setDefaultNumberOfColumnsToAdd(int value) const;
-
-    int defaultNumberOfFramesToRemove() const;
-    void setDefaultNumberOfFramesToRemove(int value) const;
-
-    int defaultNumberOfColumnsToRemove() const;
-    void setDefaultNumberOfColumnsToRemove(int value) const;
 
 protected:
     QItemSelectionModel::SelectionFlags selectionCommand(const QModelIndex &index,

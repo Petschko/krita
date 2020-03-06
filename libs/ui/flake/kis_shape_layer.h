@@ -26,6 +26,7 @@
 #include <kis_external_layer_iface.h>
 #include <kritaui_export.h>
 #include <KisDelayedUpdateNodeInterface.h>
+#include <KisCroppedOriginalLayerInterface.h>
 
 class QRect;
 class QIcon;
@@ -50,7 +51,11 @@ const QString KIS_SHAPE_LAYER_ID = "KisShapeLayer";
 
    XXX: what about removing shapes?
 */
-class KRITAUI_EXPORT KisShapeLayer : public KisExternalLayer, public KoShapeLayer, public KisDelayedUpdateNodeInterface
+class KRITAUI_EXPORT KisShapeLayer
+        : public KisExternalLayer,
+        public KoShapeLayer,
+        public KisDelayedUpdateNodeInterface,
+        public KisCroppedOriginalLayerInterface
 {
     Q_OBJECT
 
@@ -125,6 +130,11 @@ public:
 
     KUndo2Command* crop(const QRect & rect) override;
     KUndo2Command* transform(const QTransform &transform) override;
+    KUndo2Command* setProfile(const KoColorProfile *profile) override;
+    KUndo2Command* convertTo(const KoColorSpace * dstColorSpace,
+                                 KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
+                                 KoColorConversionTransformation::ConversionFlags conversionFlags = KoColorConversionTransformation::internalConversionFlags()) override;
+
 
     bool visible(bool recursive = false) const override;
     void setVisible(bool visible, bool isLoading = false) override;
@@ -146,6 +156,13 @@ public:
      */
     void forceUpdateTimedNode() override;
 
+    /**
+     * \return true if there are any pending updates in the delayed queue
+     */
+    bool hasPendingTimedUpdates() const override;
+
+    void forceUpdateHiddenAreaOnOriginal() override;
+
 protected:
     using KoShape::isVisible;
 
@@ -155,6 +172,8 @@ protected:
     KoViewConverter* converter() const;
 
     KoShapeControllerBase *shapeController() const;
+
+    friend class TransformShapeLayerDeferred;
 
 Q_SIGNALS:
     /**
@@ -178,6 +197,7 @@ Q_SIGNALS:
 
 private Q_SLOTS:
     void slotMoveShapes(const QPointF &diff);
+    void slotTransformShapes(const QTransform &transform);
 
 private:
     QList<KoShape*> shapesToBeTransformed();

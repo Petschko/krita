@@ -120,6 +120,10 @@ public:
         return value.isValid() ? value.value<T>() : defaultValue;
     }
 
+    QString getPropertyLazy(const QString & name, const char *defaultValue) const {
+        return getPropertyLazy(name, QString(defaultValue));
+    }
+
     int getInt(const QString & name, int def = 0) const;
 
     double getDouble(const QString & name, double def = 0.0) const;
@@ -140,7 +144,7 @@ public:
      * <li>A KoColor
      * <li>A QColor
      * <li>A string that can be parsed as an XML color definition
-     * <li>A string that QColor can convert to a color (see http://doc.qt.io/qt-5/qcolor.html#setNamedColor)
+     * <li>A string that QColor can convert to a color (see https://doc.qt.io/qt-5/qcolor.html#setNamedColor)
      * <li>An integer that QColor can convert to a color
      * </ul>
      *

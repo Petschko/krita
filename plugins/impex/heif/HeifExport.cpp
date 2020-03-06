@@ -44,14 +44,14 @@
 #include <kis_paint_device.h>
 #include <kis_paint_layer.h>
 
-#include <metadata/kis_meta_data_store.h>
-#include <metadata/kis_meta_data_entry.h>
-#include <metadata/kis_meta_data_value.h>
-#include <metadata/kis_meta_data_schema.h>
-#include <metadata/kis_meta_data_schema_registry.h>
-#include <metadata/kis_meta_data_filter_registry_model.h>
-#include <metadata/kis_exif_info_visitor.h>
-#include <metadata/kis_meta_data_io_backend.h>
+#include <kis_meta_data_store.h>
+#include <kis_meta_data_entry.h>
+#include <kis_meta_data_value.h>
+#include <kis_meta_data_schema.h>
+#include <kis_meta_data_schema_registry.h>
+#include <kis_meta_data_filter_registry_model.h>
+#include <kis_exif_info_visitor.h>
+#include <kis_meta_data_io_backend.h>
 
 #include "kis_iterator_ng.h"
 
@@ -115,7 +115,7 @@ private:
 };
 
 
-KisImportExportFilter::ConversionStatus HeifExport::convert(KisDocument *document, QIODevice *io,  KisPropertiesConfigurationSP configuration)
+KisImportExportErrorCode HeifExport::convert(KisDocument *document, QIODevice *io,  KisPropertiesConfigurationSP configuration)
 {
     KisImageSP image = document->savingImage();
     const KoColorSpace *cs = image->colorSpace();
@@ -128,7 +128,6 @@ KisImportExportFilter::ConversionStatus HeifExport::convert(KisDocument *documen
 
     int quality = configuration->getInt("quality", 50);
     bool lossless = configuration->getBool("lossless", false);
-
     bool has_alpha = configuration->getBool(KisImportExportFilter::ImageContainsTransparencyTag, false);
 
 
@@ -240,7 +239,7 @@ KisImportExportFilter::ConversionStatus HeifExport::convert(KisDocument *documen
         return setHeifError(document, err);
     }
 
-    return KisImportExportFilter::OK;
+    return ImportExportCodes::OK;
 }
 
 void HeifExport::initializeCapabilities()
@@ -261,21 +260,23 @@ void HeifExport::initializeCapabilities()
 void KisWdgOptionsHeif::setConfiguration(const KisPropertiesConfigurationSP cfg)
 {
     chkLossless->setChecked(cfg->getBool("lossless", true));
-    sliderQuality->setValue(cfg->getInt("quality", 50));
+    sliderQuality->setValue(qreal(cfg->getInt("quality", 50)));
+    m_hasAlpha = cfg->getBool(KisImportExportFilter::ImageContainsTransparencyTag, false);
 }
 
 KisPropertiesConfigurationSP KisWdgOptionsHeif::configuration() const
 {
     KisPropertiesConfigurationSP cfg = new KisPropertiesConfiguration();
     cfg->setProperty("lossless", chkLossless->isChecked());
-    cfg->setProperty("quality", sliderQuality->value());
+    cfg->setProperty("quality", int(sliderQuality->value()));
+    cfg->setProperty(KisImportExportFilter::ImageContainsTransparencyTag, m_hasAlpha);
     return cfg;
 }
 
 void KisWdgOptionsHeif::toggleQualitySlider(bool toggle)
 {
     // Disable the quality slider if lossless is true
-    sliderQuality->setEnabled(!toggle);
+    lossySettings->setEnabled(!toggle);
 }
 
 #include <HeifExport.moc>

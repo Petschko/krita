@@ -30,9 +30,7 @@ class QPainterPath;
 class KoGenStyle;
 class KoShapeSavingContext;
 class KoOdfLoadingContext;
-class KoShapeBackgroundPrivate;
 class KoShapePaintingContext;
-class KoViewConverter;
 
 /**
  * This is the base class for shape backgrounds.
@@ -46,7 +44,7 @@ public:
     virtual ~KoShapeBackground();
 
     /// Paints the background using the given fill path
-    virtual void paint(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &context, const QPainterPath &fillPath) const = 0;
+    virtual void paint(QPainter &painter, KoShapePaintingContext &context, const QPainterPath &fillPath) const = 0;
 
     /// Returns if the background has some transparency.
     virtual bool hasTransparency() const;
@@ -63,12 +61,7 @@ public:
     /// load background from odf styles
     virtual bool loadStyle(KoOdfLoadingContext &context, const QSizeF &shapeSize) = 0;
 
-protected:
-    KoShapeBackground(KoShapeBackgroundPrivate &);
-    KoShapeBackgroundPrivate *d_ptr;
-private:
-    Q_DECLARE_PRIVATE(KoShapeBackground)
-
+    virtual explicit operator bool() const { return true; }
 
 };
 

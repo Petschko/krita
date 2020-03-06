@@ -55,12 +55,22 @@ KisExperimentPaintOp::KisExperimentPaintOp(const KisPaintOpSettingsSP settings, 
     m_windingFill = m_experimentOption.windingFill;
     m_hardEdge = m_experimentOption.hardEdge;
 
+    //Sets the brush to pattern or foregroundColor
+    if (m_experimentOption.fillType == ExperimentFillType::Pattern) {
+        m_fillStyle = KisPainter::FillStylePattern;
+    } else {
+        m_fillStyle = KisPainter::FillStyleForegroundColor;
+    }
+
+    // Mirror options set with appropriate color, pattern, and fillStyle
     if (m_useMirroring) {
-        m_originalDevice = source()->createCompositionSourceDevice();
+        m_originalDevice = source()->createCompositionSourceDevice();        
         m_originalPainter = new KisPainter(m_originalDevice);
         m_originalPainter->setCompositeOp(COMPOSITE_COPY);
         m_originalPainter->setPaintColor(painter->paintColor());
-        m_originalPainter->setFillStyle(KisPainter::FillStyleForegroundColor);
+        m_originalPainter->setPattern(painter->pattern());        
+        m_originalPainter->setFillStyle(m_fillStyle);
+
     }
     else {
         m_originalPainter = 0;
@@ -72,7 +82,7 @@ KisExperimentPaintOp::~KisExperimentPaintOp()
     delete m_originalPainter;
 }
 
-void KisExperimentPaintOp::paintRegion(const QRegion &changedRegion)
+void KisExperimentPaintOp::paintRegion(const KisRegion &changedRegion)
 {
     if (m_windingFill) {
         m_path.setFillRule(Qt::WindingFill);
@@ -84,10 +94,13 @@ void KisExperimentPaintOp::paintRegion(const QRegion &changedRegion)
         Q_FOREACH (const QRect & rect, changedRegion.rects()) {
             m_originalPainter->fillPainterPath(m_path, rect);
             painter()->renderDabWithMirroringNonIncremental(rect, m_originalDevice);
+
         }
     }
     else {
-        painter()->setFillStyle(KisPainter::FillStyleForegroundColor);
+        //Sets options when mirror is not selected
+        painter()->setFillStyle(m_fillStyle);
+
         painter()->setCompositeOp(COMPOSITE_COPY);
         painter()->setAntiAliasPolygonFill(!m_hardEdge);
 
@@ -212,7 +225,7 @@ void KisExperimentPaintOp::paintLine(const KisPaintInformation &pi1, const KisPa
                  */
                 const int pathSizeThreshold = 128;
 
-                QRegion changedRegion;
+                KisRegion changedRegion;
                 if (distanceMetric < pathSizeThreshold) {
 
                     QRectF changedRect = m_path.boundingRect().toRect() |
@@ -232,7 +245,7 @@ void KisExperimentPaintOp::paintLine(const KisPaintInformation &pi1, const KisPa
                 m_lastPaintedPath = m_path;
             }
             else if (!m_savedPoints.isEmpty()) {
-                QRegion changedRegion = KritaUtils::splitTriangles(m_center, m_savedPoints);
+                KisRegion changedRegion = KritaUtils::splitTriangles(m_center, m_savedPoints);
                 paintRegion(changedRegion);
             }
 

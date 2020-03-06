@@ -24,13 +24,14 @@
 
 #include "kis_types.h"
 #include "kis_effect_mask.h"
+#include "KisDecoratedNodeInterface.h"
 
 /**
  * An selection mask is a single channel mask that applies a
  * particular selection to the layer the mask belongs to. A selection
  * can contain both vector and pixel selection components.
 */
-class KRITAIMAGE_EXPORT KisSelectionMask : public KisEffectMask
+class KRITAIMAGE_EXPORT KisSelectionMask : public KisEffectMask, public KisDecoratedNodeInterface
 {
     Q_OBJECT
 public:
@@ -49,13 +50,6 @@ public:
     KisNodeSP clone() const override {
         return KisNodeSP(new KisSelectionMask(*this));
     }
-
-    void mergeInMaskInternal(KisPaintDeviceSP projection,
-                             KisSelectionSP effectiveSelection,
-                             const QRect &applyRect, const QRect &preparedNeedRect,
-                             KisNode::PositionToFilthy maskPos) const override;
-
-    bool paintsOutsideSelection() const override;
 
     /// Set the selection of this adjustment layer to a copy of selection.
     void setSelection(KisSelectionSP selection);
@@ -83,9 +77,24 @@ public:
      */
     void notifySelectionChangedCompressed();
 
+    bool decorationsVisible() const override;
+    void setDecorationsVisible(bool value, bool update) override;
+    using KisDecoratedNodeInterface::setDecorationsVisible;
+
+protected:
+    void flattenSelectionProjection(KisSelectionSP selection, const QRect &dirtyRect) const override;
+
+    void mergeInMaskInternal(KisPaintDeviceSP projection,
+                             KisSelectionSP effectiveSelection,
+                             const QRect &applyRect, const QRect &preparedNeedRect,
+                             KisNode::PositionToFilthy maskPos) const override;
+
+    bool paintsOutsideSelection() const override;
+
+
 private:
-    Q_PRIVATE_SLOT(m_d, void slotSelectionChangedCompressed());
-    Q_PRIVATE_SLOT(m_d, void slotConfigChanged());
+    Q_PRIVATE_SLOT(m_d, void slotSelectionChangedCompressed())
+    Q_PRIVATE_SLOT(m_d, void slotConfigChanged())
 
     KisImageWSP image() const;
 

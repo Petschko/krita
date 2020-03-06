@@ -249,7 +249,6 @@ void TestPointMergeCommand::connectCurveSubpaths()
 #include <MockShapes.h>
 #include <commands/KoPathCombineCommand.h>
 #include "kis_debug.h"
-#include <KoPathPointData.h>
 
 void TestPointMergeCommand::testCombineShapes()
 {
@@ -314,7 +313,7 @@ void TestPointMergeCommand::testCombineShapes()
 #include "kis_algebra_2d.h"
 
 inline QPointF fetchPoint(KoPathShape *shape, int subpath, int pointIndex) {
-    return shape->absoluteTransformation(0).map(
+    return shape->absoluteTransformation().map(
         shape->pointByIndex(KoPathPointIndex(subpath, pointIndex))->point());
 }
 
@@ -323,7 +322,7 @@ void dumpShape(KoPathShape *shape, const QString &fileName)
     QImage tmp(50,50, QImage::Format_ARGB32);
     tmp.fill(0);
     QPainter p(&tmp);
-    p.drawPath(shape->absoluteTransformation(0).map(shape->outline()));
+    p.drawPath(shape->absoluteTransformation().map(shape->outline()));
     tmp.save(fileName);
 }
 

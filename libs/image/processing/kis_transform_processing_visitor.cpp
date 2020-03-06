@@ -62,7 +62,22 @@ KisTransformProcessingVisitor(qreal  xscale, qreal  yscale,
     , m_filter(filter)
     , m_angle(angle)
     , m_shapesCorrection(shapesCorrection)
+    , m_selectionHelper(0, KisSelectionBasedProcessingHelper::Functor())
 {
+}
+
+void KisTransformProcessingVisitor::setSelection(KisSelectionSP selection)
+{
+    m_selectionHelper.setSelection(selection);
+}
+
+KUndo2Command *KisTransformProcessingVisitor::createInitCommand()
+{
+    return m_selectionHelper.createInitCommand(
+        std::bind(&KisTransformProcessingVisitor::transformOneDevice,
+                  this,
+                  std::placeholders::_1,
+                  (KoUpdater*)0));
 }
 
 void KisTransformProcessingVisitor::visit(KisNode *node, KisUndoAdapter *undoAdapter)
@@ -186,22 +201,27 @@ void KisTransformProcessingVisitor::transformClones(KisLayer *layer, KisUndoAdap
 
 void KisTransformProcessingVisitor::transformPaintDevice(KisPaintDeviceSP device, KisUndoAdapter *adapter, const ProgressHelper &helper)
 {
-    KisTransaction transaction(kundo2_i18n("Transform Layer"), device);
+    m_selectionHelper.transformPaintDevice(device,
+                                           adapter,
+                                           std::bind(&KisTransformProcessingVisitor::transformOneDevice,
+                                                     this,
+                                                     std::placeholders::_1,
+                                                     helper.updater()));
 
+}
+
+void KisTransformProcessingVisitor::transformOneDevice(KisPaintDeviceSP device,
+                                                       KoUpdater *updater)
+{
     KisTransformWorker tw(device, m_sx, m_sy, m_shearx, m_sheary,
                           m_shearOrigin.x(), m_shearOrigin.y(),
-                          m_angle, m_tx, m_ty, helper.updater(),
+                          m_angle, m_tx, m_ty, updater,
                           m_filter);
     tw.run();
-    transaction.commit(adapter);
 }
 
 void KisTransformProcessingVisitor::transformSelection(KisSelectionSP selection, KisUndoAdapter *adapter, const ProgressHelper &helper)
 {
-    if(selection->hasPixelSelection()) {
-        transformPaintDevice(selection->pixelSelection(), adapter, helper);
-    }
-
     if (selection->hasShapeSelection()) {
         KisTransformWorker tw(selection->projection(), m_sx, m_sy, m_shearx, m_sheary,
                               m_shearOrigin.x(), m_shearOrigin.y(),
@@ -213,8 +233,9 @@ void KisTransformProcessingVisitor::transformSelection(KisSelectionSP selection,
         if (command) {
             adapter->addCommand(command);
         }
+    } else {
+        transformPaintDevice(selection->pixelSelection(), adapter, helper);
     }
 
     selection->updateProjection();
 }
-

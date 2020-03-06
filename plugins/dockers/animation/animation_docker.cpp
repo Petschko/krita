@@ -106,6 +106,9 @@ void AnimationDocker::setCanvas(KoCanvasBase * canvas)
 
 
         connect(animation, SIGNAL(sigUiTimeChanged(int)), this, SLOT(slotGlobalTimeChanged()));
+        connect(animation, SIGNAL(sigFramerateChanged()), this, SLOT(slotFrameRateChanged()));
+
+
         connect(m_canvas->animationPlayer(), SIGNAL(sigFrameChanged()), this, SLOT(slotGlobalTimeChanged()));
         connect(m_canvas->animationPlayer(), SIGNAL(sigPlaybackStopped()), this, SLOT(slotGlobalTimeChanged()));
         connect(m_canvas->animationPlayer(), SIGNAL(sigPlaybackStopped()), this, SLOT(updatePlayPauseIcon()));
@@ -115,6 +118,7 @@ void AnimationDocker::setCanvas(KoCanvasBase * canvas)
                 SIGNAL(valueChanged(double)),
                 m_canvas->animationPlayer(),
                 SLOT(slotUpdatePlaybackSpeed(double)));
+
 
         connect(m_canvas->viewManager()->nodeManager(), SIGNAL(sigNodeActivated(KisNodeSP)),
                 this, SLOT(slotCurrentNodeChanged(KisNodeSP)));
@@ -146,6 +150,10 @@ void AnimationDocker::setViewManager(KisViewManager *view)
 
 void AnimationDocker::slotAddOpacityKeyframe()
 {
+    // remember current node's opacity and set it once we create a new opacity keyframe
+    KisNodeSP node = m_canvas->viewManager()->activeNode();
+    KIS_SAFE_ASSERT_RECOVER_RETURN(node);
+
     addKeyframe(KisKeyframeChannel::Opacity.id(), false);
 }
 
@@ -218,6 +226,19 @@ void AnimationDocker::slotGlobalTimeChanged()
 
     QString realTimeString = realTime.toString("hh:mm:ss.zzz");
     m_animationWidget->intCurrentTime->setToolTip(realTimeString);
+}
+
+void AnimationDocker::slotFrameRateChanged()
+{
+    if (!m_canvas || !m_canvas->image()) return;
+
+    int fpsOnUI = m_animationWidget->intFramerate->value();
+    KisImageAnimationInterface *animation = m_canvas->image()->animationInterface();
+
+    if (animation->framerate() != fpsOnUI) {
+        m_animationWidget->intFramerate->setValue(animation->framerate());
+    }
+
 }
 
 void AnimationDocker::slotTimeSpinBoxChanged()
@@ -583,11 +604,14 @@ void AnimationDocker::setActions(KisActionManager *actionMan)
     m_animationWidget->btnDeleteKeyframe->setMenu(m_deleteKeyframeMenu);
     m_animationWidget->btnDeleteKeyframe->setPopupMode(QToolButton::MenuButtonPopup);
 
-    m_addOpacityKeyframeAction = new KisAction(KisAnimationUtils::addOpacityKeyframeActionName);
-    m_deleteOpacityKeyframeAction = new KisAction(KisAnimationUtils::removeOpacityKeyframeActionName);
 
-    m_addTransformKeyframeAction = new KisAction(KisAnimationUtils::addTransformKeyframeActionName);
-    m_deleteTransformKeyframeAction = new KisAction(KisAnimationUtils::removeTransformKeyframeActionName);
+    m_addOpacityKeyframeAction = m_actionManager->createAction("insert_opacity_keyframe");
+    m_deleteOpacityKeyframeAction = m_actionManager->createAction("remove_opacity_keyframe");
+
+
+
+    m_addTransformKeyframeAction = new KisAction(KisAnimationUtils::addTransformKeyframeActionName, this);
+    m_deleteTransformKeyframeAction = new KisAction(KisAnimationUtils::removeTransformKeyframeActionName, this);
 
 
     // other new stuff

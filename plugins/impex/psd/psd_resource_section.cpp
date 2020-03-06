@@ -21,8 +21,6 @@
 #include <QIODevice>
 #include <QBuffer>
 
-#include <kis_debug.h>
-
 #include "psd_utils.h"
 #include "psd_resource_block.h"
 
@@ -56,10 +54,11 @@ bool PSDImageResourceSection::read(QIODevice* io)
     buf.open(QBuffer::ReadOnly);
 
     while (!buf.atEnd()) {
-        PSDResourceBlock* block = new PSDResourceBlock();
+        PSDResourceBlock *block = new PSDResourceBlock();
         if (!block->read(&buf)) {
             error = "Error reading block: " + block->error;
             dbgFile << error << ", skipping.";
+            delete block;
             continue;
         }
         dbgFile << "resource block created. Type:" << block->identifier

@@ -33,7 +33,6 @@
 #include "kis_processing_visitor.h"
 
 #include "kis_transaction.h"
-#include "krita_utils.h"
 
 #include <KisRunnableStrokeJobData.h>
 #include <KisRunnableStrokeJobUtils.h>
@@ -83,7 +82,7 @@ KisColorizeStrokeStrategy::KisColorizeStrokeStrategy(KisPaintDeviceSP src,
                                                      const QRect &boundingRect,
                                                      KisNodeSP progressNode,
                                                      bool prefilterOnly)
-    : KisRunnableBasedStrokeStrategy("colorize-stroke", prefilterOnly ? kundo2_i18n("Prefilter Colorize Mask") : kundo2_i18n("Colorize")),
+    : KisRunnableBasedStrokeStrategy(QLatin1String("colorize-stroke"), prefilterOnly ? kundo2_i18n("Prefilter Colorize Mask") : kundo2_i18n("Colorize")),
       m_d(new Private)
 {
     m_d->progressNode = progressNode;

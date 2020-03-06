@@ -30,6 +30,7 @@
 #include <QSharedPointer>
 #include <QSet>
 #include <QMetaType>
+#include <QSharedDataPointer>
 
 #include <KoXmlReaderForward.h>
 
@@ -49,7 +50,6 @@ class KoShapeSavingContext;
 class KoShapeLoadingContext;
 class KoGenStyle;
 class KoShapeShadow;
-class KoShapePrivate;
 class KoFilterEffectStack;
 class KoSnapData;
 class KoClipPath;
@@ -60,10 +60,9 @@ class KoBorder;
 struct KoInsets;
 class KoShapeBackground;
 class KisHandlePainterHelper;
-
+class KoShapeManager;
 
 /**
- *
  * Base class for all flake shapes. Shapes extend this class
  * to allow themselves to be manipulated. This class just represents
  * a graphical shape in the document and can be manipulated by some default
@@ -118,7 +117,6 @@ public:
         GenericMatrixChange,    ///< used after the matrix was changed without knowing which property explicitly changed
         KeepAspectRatioChange, ///< used after setKeepAspectRatio()
         ParentChanged,   ///< used after a setParent()
-        CollisionDetected, ///< used when another shape moved in our boundingrect
         Deleted, ///< the shape was deleted
         StrokeChanged, ///< the shapes stroke has changed
         BackgroundChanged, ///< the shapes background has changed
@@ -130,6 +128,7 @@ public:
         ChildChanged, ///< a child of a container was changed/removed. This is propagated to all parents
         ConnectionPointChanged, ///< a connection point has changed
         ClipPathChanged, ///< the shapes clip path has changed
+        ClipMaskChanged, ///< the shapes clip path has changed
         TransparencyChanged ///< the shapetransparency value has changed
     };
 
@@ -177,39 +176,21 @@ public:
 
     /**
      * @brief Paint the shape fill
-     * The class extending this one is responsible for painting itself.  Since we do not
-     * assume the shape is square the paint must also clear its background if it will draw
-     * something transparent on top.
-     * This can be done with a method like:
-     * <code>
-       painter.fillRect(converter.normalToView(QRectF(QPointF(0.0,0.0), size())), background());</code>
-     * Or equavalent for non-square objects.
-     * Do note that a shape's top-left is always at coordinate 0,0. Even if the shape itself is rotated
-     * or translated.
+     * The class extending this one is responsible for painting itself. \p painter is expected
+     * to be preconfigured to work in "document" pixels.
+     *
      * @param painter used for painting the shape
-     * @param converter to convert between internal and view coordinates.
-     * @see applyConversion()
      * @param paintcontext the painting context.
      */
-    virtual void paint(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintcontext) = 0;
+    virtual void paint(QPainter &painter, KoShapePaintingContext &paintcontext) const = 0;
 
     /**
      * @brief paintStroke paints the shape's stroked outline
      * @param painter used for painting the shape
-     * @param converter to convert between internal and view coordinates.
      * @see applyConversion()
      * @param paintcontext the painting context.
      */
-    virtual void paintStroke(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintcontext);
-
-    /**
-     * @brief Paint the shape's border
-     * This is a helper function that could be called from the paint() method of all shapes. 
-     * @param painter used for painting the shape
-     * @param converter to convert between internal and view coordinates.
-     * @see applyConversion()
-     */
-    virtual void paintBorder(QPainter &painter, const KoViewConverter &converter);
+    virtual void paintStroke(QPainter &painter, KoShapePaintingContext &paintcontext) const;
 
     /**
      * Load a shape from odf
@@ -352,13 +333,13 @@ public:
      *         boundingRect() this rect doesn't include the stroke and other
      *         insets.
      */
-    QRectF absoluteOutlineRect(KoViewConverter *converter = 0) const;
+    QRectF absoluteOutlineRect() const;
 
     /**
      * Same as a member function, but applies to a list of shapes and returns a
      * united rect.
      */
-    static QRectF absoluteOutlineRect(const QList<KoShape*> &shapes, KoViewConverter *converter = 0);
+    static QRectF absoluteOutlineRect(const QList<KoShape*> &shapes);
 
     /**
      * @brief Add a connector point to the shape
@@ -414,7 +395,7 @@ public:
     /**
      * Set the side text should flow around this shape.
      * @param side the requested side
-     * @param runThrought run through the foreground or background or...
+     * @param runThrough run through the foreground or background or...
      */
     void setTextRunAroundSide(TextRunAroundSide side, RunThroughLevel runThrough = Background);
 
@@ -507,7 +488,7 @@ public:
     /**
      * Set the minimum height of the shape.
      * Currently it's not respected but only for informational purpose
-     * @param minimumShapeHeight the minimum height of the frame.
+     * @param height the minimum height of the frame.
      */
     void setMinimumHeight(qreal height);
 
@@ -611,7 +592,7 @@ public:
      * The run through property is used to determine if the shape is behind, inside or before text.
      * @return the run through of this shape.
      */
-    int runThrough();
+    int runThrough() const;
 
     /**
      * Set the run through property of this shape.
@@ -935,11 +916,8 @@ public:
      *
      * The absolute transformation is the combined transformation of this shape
      * and all its parents and grandparents.
-     *
-     * @param converter if not null, this method uses the converter to mark the right
-     *        offsets in the current view.
      */
-    QTransform absoluteTransformation(const KoViewConverter *converter) const;
+    QTransform absoluteTransformation() const;
 
     /**
      * Applies a transformation to this shape.
@@ -979,20 +957,12 @@ public:
     void copySettings(const KoShape *shape);
 
     /**
-     * Convenience method that allows people implementing paint() to use the shape
-     * internal coordinate system directly to paint itself instead of considering the
-     * views zoom.
-     * @param painter the painter to alter the zoom level of.
-     * @param converter the converter for the current views zoom.
-     */
-    static void applyConversion(QPainter &painter, const KoViewConverter &converter);
-
-    /**
      * A convenience method that creates a handles helper with applying transformations at
      * the same time. Please note that you shouldn't save/restore additionally. All the work
      * on restoring original painter's transformations is done by the helper.
      */
-    static KisHandlePainterHelper createHandlePainterHelper(QPainter *painter, KoShape *shape, const KoViewConverter &converter, qreal handleRadius = 0.0);
+    static KisHandlePainterHelper createHandlePainterHelperView(QPainter *painter, KoShape *shape, const KoViewConverter &converter, qreal handleRadius = 0.0);
+    static KisHandlePainterHelper createHandlePainterHelperDocument(QPainter *painter, KoShape *shape, qreal handleRadius);
 
     /**
      * @brief Transforms point from shape coordinates to document coordinates
@@ -1045,13 +1015,13 @@ public:
      * until it is fully done processing.
      * Warning! This method can be blocking for a long time
      * @param asynchronous If set to true the processing will can take place in a different thread and the
-     *                     function will not block until the shape is finised.
+     *                     function will not block until the shape is finished.
      *                     In case of printing Flake will call this method from a non-main thread and only
      *                     start printing it when the in case of printing method returned.
      *                     If set to false the processing needs to be done synchronously and will
      *                     block until the result is finished.
      */
-    virtual void waitUntilReady(const KoViewConverter &converter, bool asynchronous = true) const;
+    virtual void waitUntilReady(bool asynchronous = true) const;
 
     /// checks recursively if the shape or one of its parents is not visible or locked
     virtual bool isShapeEditable(bool recursive = true) const;
@@ -1136,20 +1106,6 @@ public:
     void setFilterEffectStack(KoFilterEffectStack *filterEffectStack);
 
     /**
-     * Set the property collision detection.
-     * Setting this to true will result in calls to shapeChanged() with the CollisionDetected
-     * parameter whenever either this or another shape is moved/rotated etc and intersects this shape.
-     * @param detect if true detect collisions.
-     */
-    void setCollisionDetection(bool detect);
-
-    /**
-     * get the property collision detection.
-     * @returns true if collision detection is on.
-     */
-    bool collisionDetection();
-
-    /**
      * Return the tool delegates for this shape.
      * In Flake a shape being selected will cause the tool manager to make available all tools that
      * can edit the selected shapes.  In some cases selecting one shape should allow the tool to
@@ -1178,12 +1134,6 @@ public:
      */
     void setHyperLink(const QString &hyperLink);
 
-    /**
-     * \internal
-     * Returns the private object for use within the flake lib
-     */
-    KoShapePrivate *priv();
-
 public:
 
     struct KRITAFLAKE_EXPORT ShapeChangeListener {
@@ -1192,7 +1142,6 @@ public:
 
     private:
         friend class KoShape;
-        friend class KoShapePrivate;
         void registerShape(KoShape *shape);
         void unregisterShape(KoShape *shape);
         void notifyShapeChangedImpl(ChangeType type, KoShape *shape);
@@ -1203,12 +1152,15 @@ public:
     void addShapeChangeListener(ShapeChangeListener *listener);
     void removeShapeChangeListener(ShapeChangeListener *listener);
 
+protected:
+    QList<ShapeChangeListener *> listeners() const;
+    void setSizeImpl(const QSizeF &size) const;
+
 public:
     static QList<KoShape*> linearizeSubtree(const QList<KoShape*> &shapes);
-
+    static QList<KoShape *> linearizeSubtreeSorted(const QList<KoShape *> &shapes);
 protected:
-    /// constructor
-    KoShape(KoShapePrivate *);
+    KoShape(const KoShape &rhs);
 
     /* ** loading saving helper methods */
     /// attributes from ODF 1.1 chapter 9.2.15 Common Drawing Shape Attributes
@@ -1288,16 +1240,32 @@ protected:
      * A hook that allows inheriting classes to do something after a KoShape property changed
      * This is called whenever the shape, position rotation or scale properties were altered.
      * @param type an indicator which type was changed.
+     * @param shape the shape.
      */
     virtual void shapeChanged(ChangeType type, KoShape *shape = 0);
 
     /// return the current matrix that contains the rotation/scale/position of this shape
     QTransform transform() const;
 
-    KoShapePrivate *d_ptr;
+private:
+    struct Private;
+    QScopedPointer<Private> d;
+
+    class SharedData;
+    QSharedDataPointer<SharedData> s;
+
+
+protected:
+    /**
+     * Notify the shape that a change was done. To be used by inheriting shapes.
+     * @param type the change type
+     */
+    void shapeChangedPriv(KoShape::ChangeType type);
 
 private:
-    Q_DECLARE_PRIVATE(KoShape)
+    void addShapeManager(KoShapeManager *manager);
+    void removeShapeManager(KoShapeManager *manager);
+    friend class KoShapeManager;
 };
 
 Q_DECLARE_METATYPE(KoShape*)

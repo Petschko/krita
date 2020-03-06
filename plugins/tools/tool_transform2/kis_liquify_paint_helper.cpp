@@ -65,7 +65,7 @@ KisLiquifyPaintHelper::~KisLiquifyPaintHelper()
 
 void KisLiquifyPaintHelper::Private::updatePreviousPaintInfo(const KisPaintInformation &info)
 {
-    QPointF prevPos = lastOutlinePos.pushThroughHistory(info.pos());
+    QPointF prevPos = lastOutlinePos.pushThroughHistory(info.pos(), converter->effectiveZoom());
     qreal angle = KisAlgebra2D::directionBetweenPoints(prevPos, info.pos(), 0);
 
     previousDistanceInfo =
@@ -88,7 +88,7 @@ void KisLiquifyPaintHelper::configurePaintOp(const KisLiquifyProperties &props,
     m_d->paintOp.reset(new KisLiquifyPaintop(props, worker));
 }
 
-void KisLiquifyPaintHelper::startPaint(KoPointerEvent *event, const KoCanvasResourceManager *manager)
+void KisLiquifyPaintHelper::startPaint(KoPointerEvent *event, const KoCanvasResourceProvider *manager)
 {
     KIS_ASSERT_RECOVER_RETURN(m_d->paintOp);
 

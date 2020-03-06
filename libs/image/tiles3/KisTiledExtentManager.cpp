@@ -101,7 +101,7 @@ inline bool KisTiledExtentManager::Data::remove(qint32 index)
             --m_count;
             needsUpdateExtent = true;
         } else {
-            KIS_ASSERT_RECOVER_NOOP(0 && "sanity check failed: the tile has already been removed!");
+            m_buffer[currentIndex].deref();
         }
     } else {
         m_buffer[currentIndex].deref();
@@ -238,7 +238,7 @@ void KisTiledExtentManager::Data::updateMax()
 KisTiledExtentManager::KisTiledExtentManager()
 {
     QWriteLocker l(&m_extentLock);
-    m_currentExtent = QRect(qint32_MAX, qint32_MAX, 0, 0);
+    m_currentExtent = QRect();
 }
 
 void KisTiledExtentManager::notifyTileAdded(qint32 col, qint32 row)
@@ -286,7 +286,7 @@ void KisTiledExtentManager::clear()
     m_rowsData.clear();
 
     QWriteLocker lock(&m_extentLock);
-    m_currentExtent = QRect(qint32_MAX, qint32_MAX, 0, 0);
+    m_currentExtent = QRect();
 }
 
 QRect KisTiledExtentManager::extent() const
@@ -297,26 +297,32 @@ QRect KisTiledExtentManager::extent() const
 
 void KisTiledExtentManager::updateExtent()
 {
-    QReadLocker cl(&m_colsData.m_extentLock);
-    QReadLocker rl(&m_rowsData.m_extentLock);
+    qint32 minX, width, minY, height;
 
-    bool colsEmpty = m_colsData.isEmpty();
-    bool rowsEmpty = m_rowsData.isEmpty();
-    KIS_ASSERT_RECOVER_RETURN(colsEmpty == rowsEmpty);
+    {
+        QReadLocker cl(&m_colsData.m_extentLock);
 
-    if (colsEmpty && rowsEmpty) {
-        QWriteLocker lock(&m_extentLock);
-        m_currentExtent = QRect(qint32_MAX, qint32_MAX, 0, 0);
-    } else {
-        const qint32 minX = m_colsData.min() * KisTileData::WIDTH;
-        const qint32 maxPlusOneX = (m_colsData.max() + 1) * KisTileData::WIDTH;
-        const qint32 minY = m_rowsData.min() * KisTileData::HEIGHT;
-        const qint32 maxPlusOneY = (m_rowsData.max() + 1) * KisTileData::HEIGHT;
-
-        QWriteLocker lock(&m_extentLock);
-        m_currentExtent =
-            QRect(minX, minY,
-                  maxPlusOneX - minX,
-                  maxPlusOneY - minY);
+        if (m_colsData.isEmpty()) {
+            minX = 0;
+            width = 0;
+        } else {
+            minX = m_colsData.min() * KisTileData::WIDTH;
+            width = (m_colsData.max() + 1) * KisTileData::WIDTH - minX;
+        }
     }
+
+    {
+        QReadLocker rl(&m_rowsData.m_extentLock);
+
+        if (m_rowsData.isEmpty()) {
+            minY = 0;
+            height = 0;
+        } else {
+            minY = m_rowsData.min() * KisTileData::HEIGHT;
+            height = (m_rowsData.max() + 1) * KisTileData::HEIGHT - minY;
+        }
+    }
+
+    QWriteLocker lock(&m_extentLock);
+    m_currentExtent = QRect(minX, minY, width, height);
 }

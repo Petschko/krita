@@ -78,7 +78,7 @@ void Viewport::setCanvas(QWidget *canvas)
     resetLayout();
 }
 
-void Viewport::setDocumentSize(const QSize &size)
+void Viewport::setDocumentSize(const QSizeF &size)
 {
     m_documentSize = size;
     resetLayout();
@@ -303,7 +303,8 @@ void Viewport::handlePaintEvent(QPainter &painter, QPaintEvent *event)
         painter.translate(offset.x(), offset.y());
         painter.setRenderHint(QPainter::Antialiasing);
         KoShapePaintingContext paintContext; //FIXME
-        m_draggedShape->paint(painter, *vc, paintContext);
+        painter.setTransform(vc->documentToView());
+        m_draggedShape->paint(painter, paintContext);
         painter.restore();
     }
 }

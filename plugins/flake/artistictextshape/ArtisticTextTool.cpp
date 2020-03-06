@@ -52,7 +52,6 @@
 #include <QAction>
 #include <QDebug>
 
-#include <QAction>
 #include <QGridLayout>
 #include <QToolButton>
 #include <QCheckBox>
@@ -90,40 +89,40 @@ ArtisticTextTool::ArtisticTextTool(KoCanvasBase *canvas)
     m_detachPath  = actionRegistry->makeQAction("artistictext_detach_from_path", this);
     m_detachPath->setEnabled(false);
     connect(m_detachPath, SIGNAL(triggered()), this, SLOT(detachPath()));
-    addAction("artistictext_detach_from_path", m_detachPath);
+//    addAction("artistictext_detach_from_path", m_detachPath);
 
     m_convertText  = actionRegistry->makeQAction("artistictext_convert_to_path", this);
     m_convertText->setEnabled(false);
     connect(m_convertText, SIGNAL(triggered()), this, SLOT(convertText()));
-    addAction("artistictext_convert_to_path", m_convertText);
+//    addAction("artistictext_convert_to_path", m_convertText);
 
     m_fontBold = actionRegistry->makeQAction("artistictext_font_bold", this);
     connect(m_fontBold, SIGNAL(toggled(bool)), this, SLOT(toggleFontBold(bool)));
-    addAction("artistictext_font_bold", m_fontBold);
+//    addAction("artistictext_font_bold", m_fontBold);
 
     m_fontItalic = actionRegistry->makeQAction("artistictext_font_italic", this);
     connect(m_fontItalic, SIGNAL(toggled(bool)), this, SLOT(toggleFontItalic(bool)));
-    addAction("artistictext_font_italic", m_fontItalic);
+//    addAction("artistictext_font_italic", m_fontItalic);
 
     m_superScript = actionRegistry->makeQAction("artistictext_superscript", this);
     connect(m_superScript, SIGNAL(triggered()), this, SLOT(setSuperScript()));
-    addAction("artistictext_superscript", m_superScript);
+//    addAction("artistictext_superscript", m_superScript);
 
     m_subScript = actionRegistry->makeQAction("artistictext_subscript", this);
     connect(m_subScript, SIGNAL(triggered()), this, SLOT(setSubScript()));
-    addAction("artistictext_subscript", m_subScript);
+//    addAction("artistictext_subscript", m_subScript);
 
     QAction *anchorStart = actionRegistry->makeQAction("artistictext_anchor_start", this);
     anchorStart->setData(ArtisticTextShape::AnchorStart);
-    addAction("artistictext_anchor_start", anchorStart);
+//    addAction("artistictext_anchor_start", anchorStart);
 
     QAction *anchorMiddle = actionRegistry->makeQAction("artistictext_anchor_middle", this);
     anchorMiddle->setData(ArtisticTextShape::AnchorMiddle);
-    addAction("artistictext_anchor_middle", anchorMiddle);
+//    addAction("artistictext_anchor_middle", anchorMiddle);
 
     QAction *anchorEnd = actionRegistry->makeQAction("artistictext_anchor_end", this);
     anchorEnd->setData(ArtisticTextShape::AnchorEnd);
-    addAction("artistictext_anchor_end", anchorEnd);
+//    addAction("artistictext_anchor_end", anchorEnd);
 
     m_anchorGroup = new QActionGroup(this);
     m_anchorGroup->setExclusive(true);
@@ -134,8 +133,8 @@ ArtisticTextTool::ArtisticTextTool(KoCanvasBase *canvas)
 
     connect(canvas->selectedShapesProxy(), SIGNAL(selectionContentChanged()), this, SLOT(textChanged()));
 
-    addAction("edit_select_all", KStandardAction::selectAll(this, SLOT(selectAll()), this));
-    addAction("edit_deselect_all", KStandardAction::deselect(this, SLOT(deselectAll()), this));
+//    addAction("edit_select_all", KStandardAction::selectAll(this, SLOT(selectAll()), this));
+//    addAction("edit_deselect_all", KStandardAction::deselect(this, SLOT(deselectAll()), this));
 
     setTextMode(true);
 }
@@ -169,7 +168,7 @@ QTransform ArtisticTextTool::cursorTransform() const
         transform.translate(0, metrics.descent());
     }
 
-    return transform * m_currentShape->absoluteTransformation(0);
+    return transform * m_currentShape->absoluteTransformation();
 }
 
 void ArtisticTextTool::paint(QPainter &painter, const KoViewConverter &converter)
@@ -180,7 +179,7 @@ void ArtisticTextTool::paint(QPainter &painter, const KoViewConverter &converter
 
     if (m_showCursor && m_blinkingCursor.isActive() && !m_currentStrategy) {
         painter.save();
-        m_currentShape->applyConversion(painter, converter);
+        painter.setTransform(converter.documentToView(), true);
         painter.setBrush(Qt::black);
         painter.setWorldTransform(cursorTransform(), true);
         painter.setClipping(false);
@@ -191,7 +190,7 @@ void ArtisticTextTool::paint(QPainter &painter, const KoViewConverter &converter
 
     if (m_currentShape->isOnPath()) {
         painter.save();
-        m_currentShape->applyConversion(painter, converter);
+        painter.setTransform(converter.documentToView(), true);
         if (!m_currentShape->baselineShape()) {
             painter.setPen(Qt::DotLine);
             painter.setBrush(Qt::NoBrush);
@@ -204,7 +203,8 @@ void ArtisticTextTool::paint(QPainter &painter, const KoViewConverter &converter
     }
     if (m_selection.hasSelection()) {
         painter.save();
-        m_selection.paint(painter, converter);
+        painter.setTransform(converter.documentToView(), true);
+        m_selection.paint(painter);
         painter.restore();
     }
 }
@@ -982,7 +982,7 @@ QVariant ArtisticTextTool::inputMethodQuery(Qt::InputMethodQuery query, const Ko
         // The rectangle covering the area of the input cursor in widget coordinates.
         QRectF rect = m_textCursorShape.boundingRect();
         rect.moveTop(rect.bottom());
-        QTransform shapeMatrix = m_currentShape->absoluteTransformation(&converter);
+        QTransform shapeMatrix = m_currentShape->absoluteTransformation();
         qreal zoomX, zoomY;
         converter.zoom(&zoomX, &zoomY);
         shapeMatrix.scale(zoomX, zoomY);

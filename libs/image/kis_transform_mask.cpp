@@ -197,7 +197,9 @@ void KisTransformMask::recaclulateStaticImage()
     KisLayerSP parentLayer = qobject_cast<KisLayer*>(parent().data());
     KIS_ASSERT_RECOVER_RETURN(parentLayer);
 
-    if (!m_d->staticCacheDevice) {
+    if (!m_d->staticCacheDevice ||
+        *m_d->staticCacheDevice->colorSpace() != *parentLayer->original()->colorSpace()) {
+
         m_d->staticCacheDevice =
             new KisPaintDevice(parentLayer->original()->colorSpace());
     }
@@ -253,7 +255,7 @@ QRect KisTransformMask::decorateRect(KisPaintDeviceSP &src,
         KisPainter::copyAreaOptimized(updatedRect.topLeft(), m_d->staticCacheDevice, dst, updatedRect);
 
 #ifdef DEBUG_RENDERING
-        dbgImage << "Recalculate" << name() << ppVar(src->exactBounds()) << ppVar(dst->exactBounds()) << ppVar(rc);
+        qDebug() << "Recalculate" << name() << ppVar(src->exactBounds()) << ppVar(dst->exactBounds()) << ppVar(rc);
         KIS_DUMP_DEVICE_2(src, DUMP_RECT, "recalc_src", "dd");
         KIS_DUMP_DEVICE_2(dst, DUMP_RECT, "recalc_dst", "dd");
 #endif /* DEBUG_RENDERING */
@@ -262,7 +264,7 @@ QRect KisTransformMask::decorateRect(KisPaintDeviceSP &src,
         m_d->worker.runPartialDst(src, dst, rc);
 
 #ifdef DEBUG_RENDERING
-        dbgImage << "Partial" << name() << ppVar(src->exactBounds()) << ppVar(src->extent()) << ppVar(dst->exactBounds()) << ppVar(dst->extent()) << ppVar(rc);
+        qDebug() << "Partial" << name() << ppVar(src->exactBounds()) << ppVar(src->extent()) << ppVar(dst->exactBounds()) << ppVar(dst->extent()) << ppVar(rc);
         KIS_DUMP_DEVICE_2(src, DUMP_RECT, "partial_src", "dd");
         KIS_DUMP_DEVICE_2(dst, DUMP_RECT, "partial_dst", "dd");
 #endif /* DEBUG_RENDERING */
@@ -271,7 +273,7 @@ QRect KisTransformMask::decorateRect(KisPaintDeviceSP &src,
         KisPainter::copyAreaOptimized(rc.topLeft(), m_d->staticCacheDevice, dst, rc);
 
 #ifdef DEBUG_RENDERING
-        dbgImage << "Fetch" << name() << ppVar(src->exactBounds()) << ppVar(dst->exactBounds()) << ppVar(rc);
+        qDebug() << "Fetch" << name() << ppVar(src->exactBounds()) << ppVar(dst->exactBounds()) << ppVar(rc);
         KIS_DUMP_DEVICE_2(src, DUMP_RECT, "fetch_src", "dd");
         KIS_DUMP_DEVICE_2(dst, DUMP_RECT, "fetch_dst", "dd");
 #endif /* DEBUG_RENDERING */
@@ -396,17 +398,26 @@ QRect KisTransformMask::extent() const
 
 QRect KisTransformMask::exactBounds() const
 {
-    QRect rc = KisMask::exactBounds();
-
-    QRect partialChangeRect;
     QRect existentProjection;
     KisLayerSP parentLayer = qobject_cast<KisLayer*>(parent().data());
     if (parentLayer) {
-        partialChangeRect = parentLayer->partialChangeRect(const_cast<KisTransformMask*>(this), rc);
         existentProjection = parentLayer->projection()->exactBounds();
     }
 
-    return changeRect(partialChangeRect) | existentProjection;
+    return changeRect(sourceDataBounds()) | existentProjection;
+}
+
+QRect KisTransformMask::sourceDataBounds() const
+{
+    QRect rc = KisMask::exactBounds();
+
+    QRect partialChangeRect = rc;
+    KisLayerSP parentLayer = qobject_cast<KisLayer*>(parent().data());
+    if (parentLayer) {
+        partialChangeRect = parentLayer->partialChangeRect(const_cast<KisTransformMask*>(this), rc);
+    }
+
+    return partialChangeRect;
 }
 
 void KisTransformMask::setX(qint32 x)
@@ -425,12 +436,17 @@ void KisTransformMask::setY(qint32 y)
 
 void KisTransformMask::forceUpdateTimedNode()
 {
-    if (m_d->updateSignalCompressor.isActive()) {
+    if (hasPendingTimedUpdates()) {
         KIS_SAFE_ASSERT_RECOVER_NOOP(!m_d->staticCacheValid);
 
         m_d->updateSignalCompressor.stop();
         slotDelayedStaticUpdate();
     }
+}
+
+bool KisTransformMask::hasPendingTimedUpdates() const
+{
+    return m_d->updateSignalCompressor.isActive();
 }
 
 void KisTransformMask::threadSafeForceStaticImageUpdate()

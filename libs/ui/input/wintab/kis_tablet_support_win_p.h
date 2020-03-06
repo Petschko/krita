@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 2015 The Qt Company Ltd.
- *  Contact: http://www.qt.io/licensing/
+ *  Contact: https://www.qt.io/licensing/
  *  Copyright (C) 2015 Michael Abrahms <miabraha@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -22,8 +22,8 @@
 #define KIS_TABLET_SUPPORT_WIN_P_H
 
 
-#include <QtCore/QVector>
-#include <QtCore/QPointF>
+#include <QVector>
+#include <QPointF>
 #include <QMap>
 #include <QRect>
 
@@ -124,7 +124,6 @@ private:
     bool m_tiltSupport;
     QVector<QWindowsTabletDeviceData> m_devices;
     int m_currentDevice;
-    QPointF m_oldGlobalPosF;
 
 
     QWidget *targetWidget{0};

@@ -52,7 +52,7 @@
 
 #ifdef DEBUG_MERGER
 #define DEBUG_NODE_ACTION(message, type, leaf, rect)            \
-    dbgImage << message << type << ":" << leaf->node()->name() << rect
+    qDebug() << message << type << ":" << leaf->node()->name() << rect
 #else
 #define DEBUG_NODE_ACTION(message, type, leaf, rect)
 #endif
@@ -84,10 +84,13 @@ public:
             return true;
         }
 
-        KisPaintDeviceSP originalDevice = layer->original();
-        originalDevice->clear(m_updateRect);
+        const QRect originalUpdateRect =
+            layer->projectionPlane()->needRectForOriginal(m_updateRect);
 
-        const QRect applyRect = m_updateRect & m_projection->extent();
+        KisPaintDeviceSP originalDevice = layer->original();
+        originalDevice->clear(originalUpdateRect);
+
+        const QRect applyRect = originalUpdateRect & m_projection->extent();
 
         // If the intersection of the updaterect and the projection extent is
         //      null, we are finish here.
@@ -169,9 +172,15 @@ public:
             prepareRegion += needRectOnSource;
         }
 
-        Q_FOREACH (const QRect &rect, prepareRegion.rects()) {
-            walker.collectRects(srcLayer, rect);
+        if (srcLayer.isNull()) {
+            return true;
+        }
+
+        auto rect = prepareRegion.begin();
+        while (rect != prepareRegion.end()) {
+            walker.collectRects(srcLayer,*rect);
             merger.startMerge(walker, false);
+            rect++;
         }
 
         return true;
@@ -216,12 +225,20 @@ void KisAsyncMerger::startMerge(KisBaseRectsWalker &walker, bool notifyClones) {
         KisMergeWalker::JobItem item = leafStack.pop();
         KisProjectionLeafSP currentLeaf = item.m_leaf;
 
+        /**
+         * In some unidentified cases teh nodes might be removed
+         * while the updates are still running. We have no proof
+         * of it yet, so just add a safety assert here.
+         */
+        KIS_SAFE_ASSERT_RECOVER_RETURN(currentLeaf);
+        KIS_SAFE_ASSERT_RECOVER_RETURN(currentLeaf->node());
+
         // All the masks should be filtered by the walkers
         KIS_SAFE_ASSERT_RECOVER_RETURN(currentLeaf->isLayer());
 
         QRect applyRect = item.m_applyRect;
 
-        if(currentLeaf->isRoot()) {
+        if (currentLeaf->isRoot()) {
             currentLeaf->projectionPlane()->recalculate(applyRect, walker.startNode());
             continue;
         }
@@ -240,8 +257,9 @@ void KisAsyncMerger::startMerge(KisBaseRectsWalker &walker, bool notifyClones) {
         }
 
 
-        if(!m_currentProjection)
+        if (!m_currentProjection) {
             setupProjection(currentLeaf, applyRect, useTempProjections);
+        }
 
         KisUpdateOriginalVisitor originalVisitor(applyRect,
                                                  m_currentProjection,
@@ -249,7 +267,7 @@ void KisAsyncMerger::startMerge(KisBaseRectsWalker &walker, bool notifyClones) {
 
         if(item.m_position & KisMergeWalker::N_FILTHY) {
             DEBUG_NODE_ACTION("Updating", "N_FILTHY", currentLeaf, applyRect);
-            if (currentLeaf->visible()) {
+            if (currentLeaf->visible() || currentLeaf->hasClones()) {
                 currentLeaf->accept(originalVisitor);
                 currentLeaf->projectionPlane()->recalculate(applyRect, walker.startNode());
             }
@@ -257,7 +275,7 @@ void KisAsyncMerger::startMerge(KisBaseRectsWalker &walker, bool notifyClones) {
         else if(item.m_position & KisMergeWalker::N_ABOVE_FILTHY) {
             DEBUG_NODE_ACTION("Updating", "N_ABOVE_FILTHY", currentLeaf, applyRect);
             if(currentLeaf->dependsOnLowerNodes()) {
-                if (currentLeaf->visible()) {
+                if (currentLeaf->visible() || currentLeaf->hasClones()) {
                     currentLeaf->accept(originalVisitor);
                     currentLeaf->projectionPlane()->recalculate(applyRect, currentLeaf->node());
                 }
@@ -265,7 +283,7 @@ void KisAsyncMerger::startMerge(KisBaseRectsWalker &walker, bool notifyClones) {
         }
         else if(item.m_position & KisMergeWalker::N_FILTHY_PROJECTION) {
             DEBUG_NODE_ACTION("Updating", "N_FILTHY_PROJECTION", currentLeaf, applyRect);
-            if (currentLeaf->visible()) {
+            if (currentLeaf->visible() || currentLeaf->hasClones()) {
                 currentLeaf->projectionPlane()->recalculate(applyRect, walker.startNode());
             }
         }

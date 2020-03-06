@@ -21,12 +21,15 @@
 #include "tablettest.h"
 #include "ui_tablettest.h"
 
-TabletTestDialog::TabletTestDialog( QWidget *parent) :
-    QDialog(parent, Qt::Window)
+TabletTestDialog::TabletTestDialog(QWidget *parent)
+    : KoDialog(parent, Qt::Dialog)
 {
+    setCaption(i18n("Tablet Tester"));
+    QWidget *page = new QWidget(this);
     m_ui = new Ui_TabletTest;
-    m_ui->setupUi(this);
-
+    m_ui->setupUi(page);
+    setMainWidget(page);
+    setButtons(KoDialog::Close);
     qApp->installEventFilter(this);
 }
 

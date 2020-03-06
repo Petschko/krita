@@ -30,7 +30,7 @@
 #include "KoColorSpaceRegistry.h"
 #include <KoColorSet.h>
 #include <KisPaletteModel.h>
-#include <KisColorsetChooser.h>
+#include <KisPaletteListWidget.h>
 #include <kis_palette_view.h>
 #include <KoResourceServerProvider.h>
 #include <KoResourceServer.h>
@@ -45,7 +45,7 @@
 #include "kis_config_notifier.h"
 #include "kis_color_input.h"
 #include "kis_icon_utils.h"
-#include "squeezedcombobox.h"
+#include "KisSqueezedComboBox.h"
 
 std::function<KisScreenColorPickerBase *(QWidget *)> KisDlgInternalColorSelector::s_screenColorPickerFactory = 0;
 
@@ -62,7 +62,7 @@ struct KisDlgInternalColorSelector::Private
     const KoColorDisplayRendererInterface *displayRenderer;
     KisHexColorInput *hexColorInput = 0;
     KisPaletteModel *paletteModel = 0;
-    KisColorsetChooser *colorSetChooser = 0;
+    KisPaletteListWidget *paletteChooser = 0;
     KisScreenColorPickerBase *screenColorPicker = 0;
 };
 
@@ -71,7 +71,7 @@ KisDlgInternalColorSelector::KisDlgInternalColorSelector(QWidget *parent, KoColo
     , m_d(new Private)
 {
     setModal(config.modal);
-    this->setFocusPolicy(Qt::ClickFocus);
+    setFocusPolicy(Qt::ClickFocus);
     m_ui = new Ui_WdgDlgInternalColorSelector();
     m_ui->setupUi(this);
 
@@ -94,12 +94,16 @@ KisDlgInternalColorSelector::KisDlgInternalColorSelector(QWidget *parent, KoColo
         m_ui->visualSelector->hide();
     }
 
-    if (!m_d->paletteModel) {
-        m_d->paletteModel = new KisPaletteModel(this);
-        m_ui->paletteBox->setPaletteModel(m_d->paletteModel);
-    }
-    m_ui->bnColorsetChooser->setIcon(KisIconUtils::loadIcon("hi16-palette_library"));
-    // For some bizare reason, the modal dialog doesn't like having the colorset set, so let's not.
+    m_d->paletteChooser = new KisPaletteListWidget(this);
+    m_d->paletteModel = new KisPaletteModel(this);
+    m_ui->bnPaletteChooser->setIcon(KisIconUtils::loadIcon("hi16-palette_library"));
+    m_ui->paletteBox->setPaletteModel(m_d->paletteModel);
+    m_ui->paletteBox->setDisplayRenderer(displayRenderer);
+    m_ui->cmbNameList->setCompanionView(m_ui->paletteBox);
+    connect(m_d->paletteChooser, SIGNAL(sigPaletteSelected(KoColorSet*)), this, SLOT(slotChangePalette(KoColorSet*)));
+    connect(m_ui->cmbNameList, SIGNAL(sigColorSelected(KoColor)), SLOT(slotColorUpdated(KoColor)));
+
+    // For some bizarre reason, the modal dialog doesn't like having the colorset set, so let's not.
     if (config.paletteBox) {
         //TODO: Add disable signal as well. Might be not necessary...?
         KConfigGroup cfg(KSharedConfig::openConfig()->group(""));
@@ -117,18 +121,13 @@ KisDlgInternalColorSelector::KisDlgInternalColorSelector(QWidget *parent, KoColo
             }
         }
 
-        connect(m_ui->paletteBox, SIGNAL(entrySelected(KoColorSetEntry)), this, SLOT(slotSetColorFromColorSetEntry(KoColorSetEntry)));
-        connect(m_ui->cmbNameList, SIGNAL(currentIndexChanged(int)), this, SLOT(slotSetColorFromColorList()));
-        //m_ui->paletteBox->setDisplayRenderer(displayRenderer);
-        m_d->colorSetChooser = new KisColorsetChooser(this);
-        connect(m_d->colorSetChooser, SIGNAL(paletteSelected(KoColorSet*)), this, SLOT(slotChangePalette(KoColorSet*)));
-
-        m_ui->bnColorsetChooser->setPopupWidget(m_d->colorSetChooser);
-
+        connect(m_ui->paletteBox, SIGNAL(sigColorSelected(KoColor)), this,
+                SLOT(slotColorUpdated(KoColor)));
+        m_ui->bnPaletteChooser->setPopupWidget(m_d->paletteChooser);
     } else {
         m_ui->paletteBox->setEnabled(false);
         m_ui->cmbNameList->setEnabled(false);
-        m_ui->bnColorsetChooser->setEnabled(false);
+        m_ui->bnPaletteChooser->setEnabled(false);
     }
 
     if (config.prevNextButtons) {
@@ -151,7 +150,7 @@ KisDlgInternalColorSelector::KisDlgInternalColorSelector(QWidget *parent, KoColo
         m_d->hexColorInput->setToolTip(i18n("This is a hexcode input, for webcolors. It can only get colors in the sRGB space."));
     }
 
-    // screen color picker is in kritaui, so a dependency inversion is used to get it
+    // KisScreenColorPicker is in the kritaui module, so dependency inversion is used to access it.
     m_ui->screenColorPickerWidget->setLayout(new QHBoxLayout(m_ui->screenColorPickerWidget));
     if (s_screenColorPickerFactory) {
         m_d->screenColorPicker = s_screenColorPickerFactory(m_ui->screenColorPickerWidget);
@@ -163,12 +162,11 @@ KisDlgInternalColorSelector::KisDlgInternalColorSelector(QWidget *parent, KoColo
         }
     }
 
-    connect(this, SIGNAL(signalForegroundColorChosen(KoColor)), this, SLOT(slotLockSelector()));
     m_d->compressColorChanges = new KisSignalCompressor(100 /* ms */, KisSignalCompressor::POSTPONE, this);
     connect(m_d->compressColorChanges, SIGNAL(timeout()), this, SLOT(endUpdateWithNewColor()));
 
-    connect(m_ui->buttonBox, SIGNAL(accepted()), this, SLOT(accept()));
-    connect(m_ui->buttonBox, SIGNAL(rejected()), this, SLOT(reject()));
+    connect(m_ui->buttonBox, SIGNAL(accepted()), this, SLOT(accept()), Qt::UniqueConnection);
+    connect(m_ui->buttonBox, SIGNAL(rejected()), this, SLOT(reject()), Qt::UniqueConnection);
 
     connect(this, SIGNAL(finished(int)), SLOT(slotFinishUp()));
 }
@@ -180,8 +178,20 @@ KisDlgInternalColorSelector::~KisDlgInternalColorSelector()
 
 void KisDlgInternalColorSelector::slotColorUpdated(KoColor newColor)
 {
-    //if the update did not come from this selector...
-    if (m_d->allowUpdates || QObject::sender() == this->parent()) {
+    // not-so-nice solution: if someone calls this slot directly and that code was
+    // triggered by our compressor signal, our compressor is technically the sender()!
+    if (sender() == m_d->compressColorChanges) {
+        return;
+    }
+    // Do not accept external updates while a color update emit is pending;
+    // Note: Assumes external updates only come from parent(), a separate slot might be better
+    if (m_d->allowUpdates || (QObject::sender() && QObject::sender() != this->parent())) {
+        // Enforce palette colors
+        KConfigGroup group(KSharedConfig::openConfig(), "");
+        if (group.readEntry("colorsettings/forcepalettecolors", false)) {
+            newColor = m_ui->paletteBox->closestColor(newColor);
+        }
+
         if (m_d->lockUsedCS){
             newColor.convertTo(m_d->currentColorSpace);
             m_d->currentColor = newColor;
@@ -212,6 +222,9 @@ void KisDlgInternalColorSelector::colorSpaceChanged(const KoColorSpace *cs)
 void KisDlgInternalColorSelector::lockUsedColorSpace(const KoColorSpace *cs)
 {
     colorSpaceChanged(cs);
+    if (m_d->currentColor.colorSpace() != m_d->currentColorSpace) {
+        m_d->currentColor.convertTo(m_d->currentColorSpace);
+    }
     m_d->lockUsedCS = true;
 }
 
@@ -222,7 +235,7 @@ void KisDlgInternalColorSelector::setDisplayRenderer(const KoColorDisplayRendere
         m_ui->visualSelector->setDisplayRenderer(displayRenderer);
         m_ui->currentColor->setDisplayRenderer(displayRenderer);
         m_ui->previousColor->setDisplayRenderer(displayRenderer);
-        //m_ui->paletteBox->setDisplayRenderer(displayRenderer);
+        m_ui->paletteBox->setDisplayRenderer(displayRenderer);
     } else {
         m_d->displayRenderer = KoDumbColorDisplayRenderer::instance();
     }
@@ -245,17 +258,6 @@ KoColor KisDlgInternalColorSelector::getCurrentColor()
 void KisDlgInternalColorSelector::chooseAlpha(bool chooseAlpha)
 {
     m_d->chooseAlpha = chooseAlpha;
-}
-
-void KisDlgInternalColorSelector::slotConfigurationChanged()
-{
-    //m_d->canvas->displayColorConverter()->
-    //slotColorSpaceChanged(m_d->canvas->image()->colorSpace());
-}
-
-void KisDlgInternalColorSelector::slotLockSelector()
-{
-    m_d->allowUpdates = false;
 }
 
 void KisDlgInternalColorSelector::setPreviousColor(KoColor c)
@@ -284,12 +286,16 @@ void KisDlgInternalColorSelector::updateAllElements(QObject *source)
         m_d->hexColorInput->update();
     }
 
+    if (source != m_ui->paletteBox) {
+        m_ui->paletteBox->selectClosestColor(m_d->currentColor);
+    }
+
     m_ui->previousColor->setColor(m_d->previousColor);
 
     m_ui->currentColor->setColor(m_d->currentColor);
 
-    if (source != this->parent()) {
-        emit(signalForegroundColorChosen(m_d->currentColor));
+    if (source && source != this->parent()) {
+        m_d->allowUpdates = false;
         m_d->compressColorChanges->start();
     }
 
@@ -301,6 +307,7 @@ void KisDlgInternalColorSelector::updateAllElements(QObject *source)
 
 void KisDlgInternalColorSelector::endUpdateWithNewColor()
 {
+    emit signalForegroundColorChosen(m_d->currentColor);
     m_d->allowUpdates = true;
 }
 
@@ -330,57 +337,7 @@ void KisDlgInternalColorSelector::slotChangePalette(KoColorSet *set)
     if (!set) {
         return;
     }
-    m_d->paletteModel->setColorSet(set);
-    m_ui->cmbNameList->clear();
-    for (quint32 i = 0; i< set->nColors(); i++) {
-        KoColorSetEntry entry = set->getColorGlobal(i);
-        QPixmap colorSquare = QPixmap(32, 32);
-        if (entry.spotColor()) {
-            QImage img = QImage(32, 32, QImage::Format_ARGB32);
-            QPainter circlePainter;
-            img.fill(Qt::transparent);
-            circlePainter.begin(&img);
-            QBrush brush = QBrush(Qt::SolidPattern);
-            brush.setColor(entry.color().toQColor());
-            circlePainter.setBrush(brush);
-            QPen pen = circlePainter.pen();
-            pen.setColor(Qt::transparent);
-            pen.setWidth(0);
-            circlePainter.setPen(pen);
-            circlePainter.drawEllipse(0, 0, 32, 32);
-            circlePainter.end();
-            colorSquare = QPixmap::fromImage(img);
-        } else {
-            colorSquare.fill(entry.color().toQColor());
-        }
-        QString name = entry.name();
-        if (!entry.id().isEmpty()){
-            name = entry.id() + " - " + entry.name();
-        }
-        m_ui->cmbNameList->addSqueezedItem(QIcon(colorSquare), name);
-    }
-    QCompleter *completer = new QCompleter(m_ui->cmbNameList->model());
-    completer->setCompletionMode(QCompleter::PopupCompletion);
-    completer->setCaseSensitivity(Qt::CaseInsensitive);
-    completer->setFilterMode(Qt::MatchContains);
-    m_ui->cmbNameList->setCompleter(completer);
-}
-
-void KisDlgInternalColorSelector::slotSetColorFromColorList()
-{
-    int index = m_ui->cmbNameList->currentIndex();
-    if (m_d->paletteModel) {
-        slotSetColorFromColorSetEntry(m_d->paletteModel->colorSet()->getColorGlobal(index));
-        m_ui->paletteBox->blockSignals(true);
-        m_ui->paletteBox->selectionModel()->clearSelection();
-        m_ui->paletteBox->selectionModel()->setCurrentIndex(m_d->paletteModel->indexFromId(index), QItemSelectionModel::Select);
-        m_ui->paletteBox->blockSignals(false);
-    }
-}
-
-void KisDlgInternalColorSelector::slotSetColorFromColorSetEntry(KoColorSetEntry entry)
-{
-    slotColorUpdated(entry.color());
+    m_d->paletteModel->setPalette(set);
 }
 
 void KisDlgInternalColorSelector::showEvent(QShowEvent *event)

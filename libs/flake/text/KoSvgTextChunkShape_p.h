@@ -20,16 +20,18 @@
 
 #include "KoSvgText.h"
 #include "KoSvgTextProperties.h"
-#include <KoShapeContainer_p.h>
+#include <QSharedData>
 #include <QTextCharFormat>
 
 class SvgGraphicsContext;
 
-struct KoSvgTextChunkShapePrivate : public KoShapeContainerPrivate
+class KoSvgTextChunkShape::SharedData : public QSharedData
 {
-    KoSvgTextChunkShapePrivate(KoSvgTextChunkShape *_q);
-    KoSvgTextChunkShapePrivate(const KoSvgTextChunkShapePrivate &rhs, KoSvgTextChunkShape *q);
-    ~KoSvgTextChunkShapePrivate();
+public:
+
+    SharedData();
+    SharedData(const SharedData &rhs);
+    ~SharedData();
 
     KoSvgTextProperties properties;
     QFont font;
@@ -42,16 +44,16 @@ struct KoSvgTextChunkShapePrivate : public KoShapeContainerPrivate
 
     QString text;
 
-    struct LayoutInterface;
-    QScopedPointer<LayoutInterface> layoutInterface;
-
     QPainterPath associatedOutline;
 
-    KoSvgText::KoSvgCharChunkFormat fetchCharFormat() const;
-
-    void applyParentCharTransformations(const QVector<KoSvgText::CharTransformation> transformations);
     void loadContextBasedProperties(SvgGraphicsContext *gc);
+    bool isRichTextPreferred = true;
+};
 
-    Q_DECLARE_PUBLIC(KoSvgTextChunkShape)
+class KoSvgTextChunkShape::Private
+{
+public:
+    struct LayoutInterface;
+    QScopedPointer<LayoutInterface> layoutInterface;
 };
 

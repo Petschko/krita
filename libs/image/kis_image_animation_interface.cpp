@@ -105,13 +105,13 @@ KisImageAnimationInterface::KisImageAnimationInterface(KisImage *image)
     m_d->framerate = 24;
     m_d->fullClipRange = KisTimeRange::fromTime(0, 100);
 
-    connect(this, SIGNAL(sigInternalRequestTimeSwitch(int, bool)), SLOT(switchCurrentTimeAsync(int, bool)));
+    connect(this, SIGNAL(sigInternalRequestTimeSwitch(int,bool)), SLOT(switchCurrentTimeAsync(int,bool)));
 }
 
 KisImageAnimationInterface::KisImageAnimationInterface(const KisImageAnimationInterface &rhs, KisImage *newImage)
     : m_d(new Private(*rhs.m_d, newImage))
 {
-    connect(this, SIGNAL(sigInternalRequestTimeSwitch(int, bool)), SLOT(switchCurrentTimeAsync(int, bool)));
+    connect(this, SIGNAL(sigInternalRequestTimeSwitch(int,bool)), SLOT(switchCurrentTimeAsync(int,bool)));
 }
 
 KisImageAnimationInterface::~KisImageAnimationInterface()
@@ -300,7 +300,7 @@ void KisImageAnimationInterface::switchCurrentTimeAsync(int frameId, bool useUnd
     emit sigUiTimeChanged(frameId);
 }
 
-void KisImageAnimationInterface::requestFrameRegeneration(int frameId, const QRegion &dirtyRegion)
+void KisImageAnimationInterface::requestFrameRegeneration(int frameId, const KisRegion &dirtyRegion)
 {
     KisStrokeStrategy *strategy =
         new KisRegenerateFrameStrokeStrategy(frameId,

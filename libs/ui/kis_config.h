@@ -22,6 +22,7 @@
 #include <QStringList>
 #include <QList>
 #include <QColor>
+#include <QObject>
 
 #include <ksharedconfig.h>
 #include <kconfiggroup.h>
@@ -33,6 +34,8 @@
 class KoColorProfile;
 class KoColorSpace;
 class KisSnapConfig;
+class QSettings;
+class KisOcioConfiguration;
 
 class KRITAUI_EXPORT KisConfig
 {
@@ -46,9 +49,18 @@ public:
 
     ~KisConfig();
 
+public Q_SLOTS:
+    /// Log the most interesting settings to the usage log
+    void logImportantSettings() const;
+public:
+
     bool disableTouchOnCanvas(bool defaultValue = false) const;
     void setDisableTouchOnCanvas(bool value) const;
 
+    bool disableTouchRotation(bool defaultValue = false) const;
+    void setDisableTouchRotation(bool value) const;
+
+    // XXX Unused?
     bool useProjections(bool defaultValue = false) const;
     void setUseProjections(bool useProj) const;
 
@@ -151,6 +163,9 @@ public:
     bool allowLCMSOptimization(bool defaultValue = false) const;
     void setAllowLCMSOptimization(bool allowLCMSOptimization);
 
+    bool forcePaletteColors(bool defaultValue = false) const;
+    void setForcePaletteColors(bool forcePaletteColors);
+
     void writeKoColor(const QString& name, const KoColor& color) const;
     KoColor readKoColor(const QString& name, const KoColor& color = KoColor()) const;
 
@@ -173,7 +188,7 @@ public:
     void setRenderIntent(qint32 monitorRenderIntent) const;
 
     bool useOpenGL(bool defaultValue = false) const;
-    void setUseOpenGL(bool useOpenGL) const;
+    void disableOpenGL() const;
 
     int openGLFilteringMode(bool defaultValue = false) const;
     void setOpenGLFilteringMode(int filteringMode);
@@ -181,6 +196,7 @@ public:
     bool useOpenGLTextureBuffer(bool defaultValue = false) const;
     void setUseOpenGLTextureBuffer(bool useBuffer);
 
+    // XXX Unused?
     bool disableVSync(bool defaultValue = false) const;
     void setDisableVSync(bool disableVSync);
 
@@ -300,7 +316,13 @@ public:
     void setPressureTabletCurve(const QString& curveString) const;
 
     bool useWin8PointerInput(bool defaultValue = false) const;
-    void setUseWin8PointerInput(bool value) const;
+    void setUseWin8PointerInput(bool value);
+
+    static bool useWin8PointerInputNoApp(QSettings *settings, bool defaultValue = false);
+    static void setUseWin8PointerInputNoApp(QSettings *settings, bool value);
+
+    bool useRightMiddleTabletButtonWorkaround(bool defaultValue = false) const;
+    void setUseRightMiddleTabletButtonWorkaround(bool value);
 
     qreal vastScrolling(bool defaultValue = false) const;
     void setVastScrolling(const qreal factor) const;
@@ -354,7 +376,8 @@ public:
     QStringList favoriteCompositeOps(bool defaultValue = false) const;
     void setFavoriteCompositeOps(const QStringList& compositeOps) const;
 
-    QString exportConfiguration(const QString &filterId, bool defaultValue = false) const;
+    QString exportConfigurationXML(const QString &filterId, bool defaultValue = false) const;
+    KisPropertiesConfigurationSP exportConfiguration(const QString &filterId, bool defaultValue = false) const;
     void setExportConfiguration(const QString &filterId, KisPropertiesConfigurationSP properties) const;
 
     QString importConfiguration(const QString &filterId, bool defaultValue = false) const;
@@ -369,6 +392,9 @@ public:
     bool levelOfDetailEnabled(bool defaultValue = false) const;
     void setLevelOfDetailEnabled(bool value);
 
+    KisOcioConfiguration ocioConfiguration(bool defaultValue = false) const;
+    void setOcioConfiguration(const KisOcioConfiguration &cfg);
+
     enum OcioColorManagementMode {
         INTERNAL = 0,
         OCIO_CONFIG,
@@ -377,12 +403,6 @@ public:
 
     OcioColorManagementMode ocioColorManagementMode(bool defaultValue = false) const;
     void setOcioColorManagementMode(OcioColorManagementMode mode) const;
-
-    QString ocioConfigurationPath(bool defaultValue = false) const;
-    void setOcioConfigurationPath(const QString &path) const;
-
-    QString ocioLutPath(bool defaultValue = false) const;
-    void setOcioLutPath(const QString &path) const;
 
     int ocioLutEdgeSize(bool defaultValue = false) const;
     void setOcioLutEdgeSize(int value);
@@ -398,6 +418,11 @@ public:
 
     QString toolbarSlider(int sliderNumber, bool defaultValue = false) const;
     void setToolbarSlider(int sliderNumber, const QString &slider);
+
+
+    int layerThumbnailSize(bool defaultValue = false) const;
+    void setLayerThumbnailSize(int size);
+
 
     bool sliderLabels(bool defaultValue = false) const;
     void setSliderLabels(bool enabled);
@@ -424,11 +449,12 @@ public:
     void setDefaultBackgroundOpacity(quint8 value);
 
     QColor defaultBackgroundColor(bool defaultValue = false) const;
-    void setDefaultBackgroundColor(QColor value);
+    void setDefaultBackgroundColor(const QColor &value);
 
     enum BackgroundStyle {
-        LAYER = 0,
-        PROJECTION = 1
+        RASTER_LAYER = 0,
+        CANVAS_COLOR = 1,
+        FILL_LAYER = 2
     };
 
     BackgroundStyle defaultBackgroundStyle(bool defaultValue = false) const;
@@ -487,8 +513,8 @@ public:
     bool useEraserBrushOpacity(bool defaultValue = false) const;
     void setUseEraserBrushOpacity(bool value);
 
-    QColor getMDIBackgroundColor(bool defaultValue = false) const;
-    void setMDIBackgroundColor(const QColor & v) const;
+    QString getMDIBackgroundColor(bool defaultValue = false) const;
+    void setMDIBackgroundColor(const QString & v) const;
 
     QString getMDIBackgroundImage(bool defaultValue = false) const;
     void setMDIBackgroundImage(const QString & fileName) const;
@@ -504,14 +530,17 @@ public:
     bool toolOptionsInDocker(bool defaultValue = false) const;
     void setToolOptionsInDocker(bool inDocker);
 
+    bool kineticScrollingEnabled(bool defaultValue = false) const;
+    void setKineticScrollingEnabled(bool enabled);
+
     int kineticScrollingGesture(bool defaultValue = false) const;
     void setKineticScrollingGesture(int kineticScroll);
 
     int kineticScrollingSensitivity(bool defaultValue = false) const;
     void setKineticScrollingSensitivity(int sensitivity);
 
-    bool kineticScrollingScrollbar(bool defaultValue = false) const;
-    void setKineticScrollingScrollbar(bool scrollbar);
+    bool kineticScrollingHiddenScrollbars(bool defaultValue = false) const;
+    void setKineticScrollingHideScrollbars(bool scrollbar);
 
     void setEnableOpenGLFramerateLogging(bool value) const;
     bool enableOpenGLFramerateLogging(bool defaultValue = false) const;
@@ -521,6 +550,9 @@ public:
 
     void setEnableAmdVectorizationWorkaround(bool value);
     bool enableAmdVectorizationWorkaround(bool defaultValue = false) const;
+
+    void setDisableAVXOptimizations(bool value);
+    bool disableAVXOptimizations(bool defaultValue = false) const;
 
     bool animationDropFrames(bool defaultValue = false) const;
     void setAnimationDropFrames(bool value);
@@ -546,9 +578,6 @@ public:
     bool stabilizerDelayedPaint(bool defaultValue = false) const;
     void setStabilizerDelayedPaint(bool value);
 
-    QString customFFMpegPath(bool defaultValue = false) const;
-    void setCustomFFMpegPath(const QString &value) const;
-
     bool showBrushHud(bool defaultValue = false) const;
     void setShowBrushHud(bool value);
 
@@ -560,6 +589,29 @@ public:
 
     QColor defaultAssistantsColor(bool defaultValue = false) const;
     void setDefaultAssistantsColor(const QColor &color) const;
+
+    bool autoSmoothBezierCurves(bool defaultValue = false) const;
+    void setAutoSmoothBezierCurves(bool value);
+    
+    bool activateTransformToolAfterPaste(bool defaultValue = false) const;
+    void setActivateTransformToolAfterPaste(bool value);
+    
+    enum RootSurfaceFormat {
+        BT709_G22 = 0,
+        BT709_G10,
+        BT2020_PQ
+    };
+    RootSurfaceFormat rootSurfaceFormat(bool defaultValue = false) const;
+    void setRootSurfaceFormat(RootSurfaceFormat value);
+
+    static RootSurfaceFormat rootSurfaceFormat(QSettings *displayrc, bool defaultValue = false);
+    static void setRootSurfaceFormat(QSettings *displayrc, RootSurfaceFormat value);
+
+    bool useZip64(bool defaultValue = false) const;
+    void setUseZip64(bool value);
+
+    bool convertLayerColorSpaceInProperties(bool defaultValue = false) const;
+    void setConvertLayerColorSpaceInProperties(bool value);
 
     template<class T>
     void writeEntry(const QString& name, const T& value) {

@@ -24,7 +24,6 @@
 #include <QVector>
 #include <QScopedPointer>
 #include <QImage>
-#include <QImage>
 #include <QPainter>
 
 #include <resources/KoResource.h>
@@ -32,7 +31,6 @@
 #include <KoShape.h>
 #include <KoShapeGroup.h>
 #include <KoShapeManager.h>
-#include <KoViewConverter.h>
 #include <KoShapePaintingContext.h>
 
 #include "kritaflake_export.h"

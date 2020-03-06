@@ -222,6 +222,11 @@ void KisMimeDatabase::fillMimeData()
         mimeType.suffixes = QStringList() << "gpl" << "pal" << "act" << "aco" << "colors" << "xml" << "sbz";
         s_mimeDatabase << mimeType;
 
+        mimeType.mimeType = "krita/x-colorset";
+        mimeType.description = i18nc("description of a file type", "Krita Color Palette");
+        mimeType.suffixes = QStringList() << "kpl";
+        s_mimeDatabase << mimeType;
+
         mimeType.mimeType = "application/x-opencolorio-configuration";
         mimeType.description = i18nc("description of a file type", "OpenColorIO Configuration");
         mimeType.suffixes = QStringList() << "ocio";
@@ -235,11 +240,6 @@ void KisMimeDatabase::fillMimeData()
         mimeType.mimeType = "application/x-gimp-pattern";
         mimeType.description = i18nc("description of a file type", "GIMP Patterns");
         mimeType.suffixes = QStringList() << "pat";
-        s_mimeDatabase << mimeType;
-
-        mimeType.mimeType = "application/x-karbon-gradient";
-        mimeType.description = i18nc("description of a file type", "Karbon Gradients");
-        mimeType.suffixes = QStringList() << "kgr";
         s_mimeDatabase << mimeType;
 
         mimeType.mimeType = "application/x-krita-bundle";
@@ -262,6 +262,11 @@ void KisMimeDatabase::fillMimeData()
         mimeType.suffixes = QStringList() << "krf";
         s_mimeDatabase << mimeType;
 
+        mimeType.mimeType = "application/x-krita-shortcuts";
+        mimeType.description = i18nc("description of a file type", "Krita Shortcut Scheme");
+        mimeType.suffixes = QStringList() << "shortcuts";
+        s_mimeDatabase << mimeType;
+
         mimeType.mimeType = "image/x-krita-raw";
         mimeType.description = i18nc("description of a file type", "Camera Raw Files");
         mimeType.suffixes = QStringList() << "bay" << "bmq" << "cr2" << "crw" << "cs1" << "dc2" << "dcr" << "dng" << "erf" << "fff" << "hdr" << "k25" << "kdc" << "mdc" << "mos" << "mrw" << "nef" << "orf" << "pef" << "pxn" << "raf" << "raw" << "rdc" << "sr2" << "srf" << "x3f" << "arw" << "3fr" << "cine" << "ia" << "kc2" << "mef" << "nrw" << "qtk" << "rw2" << "sti" << "rwl" << "srw";
@@ -280,6 +285,11 @@ void KisMimeDatabase::fillMimeData()
         mimeType.mimeType = "image/heic";
         mimeType.description = i18nc("description of a file type", "HEIC/HEIF Image");
         mimeType.suffixes = QStringList() << "heic" << "heif";
+        s_mimeDatabase << mimeType;
+        
+        mimeType.mimeType = "image/jp2";
+        mimeType.description = i18nc("description of a file type", "JP2 Image");
+        mimeType.suffixes = QStringList() << "jp2" << "j2k";
         s_mimeDatabase << mimeType;
 
         debugPlugin << "Filled mimedatabase with" << s_mimeDatabase.count() << "special mimetypes";

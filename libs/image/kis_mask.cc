@@ -43,6 +43,8 @@
 #include "kis_mask_projection_plane.h"
 
 #include "kis_raster_keyframe_channel.h"
+#include "KisSafeNodeProjectionStore.h"
+
 
 struct Q_DECL_HIDDEN KisMask::Private {
     Private(KisMask *_q)
@@ -66,16 +68,18 @@ struct Q_DECL_HIDDEN KisMask::Private {
     QScopedPointer<QPoint> deferredSelectionOffset;
 
     KisAbstractProjectionPlaneSP projectionPlane;
-    KisCachedSelection cachedSelection;
+    KisSafeSelectionNodeProjectionStoreSP safeProjection;
 
     void initSelectionImpl(KisSelectionSP copyFrom, KisLayerSP parentLayer, KisPaintDeviceSP copyFromDevice);
 };
 
 KisMask::KisMask(const QString & name)
-        : KisNode()
+        : KisNode(nullptr)
         , m_d(new Private(this))
 {
     setName(name);
+    m_d->safeProjection = new KisSafeSelectionNodeProjectionStore();
+    m_d->safeProjection->setImage(image());
 }
 
 KisMask::KisMask(const KisMask& rhs)
@@ -84,6 +88,8 @@ KisMask::KisMask(const KisMask& rhs)
         , m_d(new Private(this))
 {
     setName(rhs.name());
+
+    m_d->safeProjection = new KisSafeSelectionNodeProjectionStore(*rhs.m_d->safeProjection);
 
     if (rhs.m_d->selection) {
         m_d->selection = new KisSelection(*rhs.m_d->selection.data());
@@ -99,16 +105,24 @@ KisMask::KisMask(const KisMask& rhs)
 
 KisMask::~KisMask()
 {
+    if (m_d->selection) {
+        m_d->selection->setParentNode(0);
+    }
+
     delete m_d;
 }
 
 void KisMask::setImage(KisImageWSP image)
 {
     KisPaintDeviceSP parentPaintDevice = parent() ? parent()->original() : 0;
-    KisDefaultBoundsBaseSP defaultBounds = new KisSelectionDefaultBounds(parentPaintDevice, image);
+    KisDefaultBoundsBaseSP defaultBounds = new KisSelectionDefaultBounds(parentPaintDevice);
     if (m_d->selection) {
         m_d->selection->setDefaultBounds(defaultBounds);
     }
+
+    m_d->safeProjection->setImage(image);
+
+    KisNode::setImage(image);
 }
 
 bool KisMask::allowAsChild(KisNodeSP node) const
@@ -165,19 +179,27 @@ void KisMask::Private::initSelectionImpl(KisSelectionSP copyFrom, KisLayerSP par
          * We can't use setSelection as we may not have parent() yet
          */
         selection = new KisSelection(*copyFrom);
-        selection->setDefaultBounds(new KisSelectionDefaultBounds(parentPaintDevice, parentLayer->image()));
+        selection->setDefaultBounds(new KisSelectionDefaultBounds(parentPaintDevice));
         if (copyFrom->hasShapeSelection()) {
             delete selection->flatten();
         }
     } else if (copyFromDevice) {
-        selection = new KisSelection(new KisSelectionDefaultBounds(parentPaintDevice, parentLayer->image()));
+        KritaUtils::DeviceCopyMode copyMode =
+            q->inherits("KisFilterMask") || q->inherits("KisTransparencyMask") ?
+            KritaUtils::CopyAllFrames : KritaUtils::CopySnapshot;
 
-        QRect rc(copyFromDevice->extent());
-        KisPainter::copyAreaOptimized(rc.topLeft(), copyFromDevice, selection->pixelSelection(), rc);
-        selection->pixelSelection()->invalidateOutlineCache();
+        selection = new KisSelection(copyFromDevice, copyMode, new KisSelectionDefaultBounds(parentPaintDevice));
 
+        KisPixelSelectionSP pixelSelection = selection->pixelSelection();
+        if (pixelSelection->framesInterface()) {
+            KisRasterKeyframeChannel *keyframeChannel = pixelSelection->keyframeChannel();
+            keyframeChannel->setFilenameSuffix(".pixelselection");
+
+            q->addKeyframeChannel(keyframeChannel);
+            q->enableAnimation();
+        }
     } else {
-        selection = new KisSelection(new KisSelectionDefaultBounds(parentPaintDevice, parentLayer->image()));
+        selection = new KisSelection(new KisSelectionDefaultBounds(parentPaintDevice));
         selection->pixelSelection()->setDefaultPixel(KoColor(Qt::white, selection->pixelSelection()->colorSpace()));
 
         if (deferredSelectionOffset) {
@@ -197,7 +219,8 @@ KisSelectionSP KisMask::selection() const
 
 KisPaintDeviceSP KisMask::paintDevice() const
 {
-    return selection()->pixelSelection();
+    KisSelectionSP selection = this->selection();
+    return selection ? selection->pixelSelection() : 0;
 }
 
 KisPaintDeviceSP KisMask::original() const
@@ -207,7 +230,15 @@ KisPaintDeviceSP KisMask::original() const
 
 KisPaintDeviceSP KisMask::projection() const
 {
-    return paintDevice();
+    KisPaintDeviceSP originalDevice = original();
+    KisPaintDeviceSP result = originalDevice;
+
+    KisSelectionSP selection = this->selection();
+    if (selection && hasTemporaryTarget()) {
+        result = m_d->safeProjection->getDeviceLazy(selection)->pixelSelection();
+    }
+
+    return result;
 }
 
 KisAbstractProjectionPlaneSP KisMask::projectionPlane() const
@@ -255,10 +286,9 @@ void KisMask::apply(KisPaintDeviceSP projection, const QRect &applyRect, const Q
 {
     if (selection()) {
 
-        m_d->selection->updateProjection(applyRect);
+        flattenSelectionProjection(m_d->selection, applyRect);
 
         KisSelectionSP effectiveSelection = m_d->selection;
-        QRect effectiveExtent;
 
         {
             // Access temporary target under the lock held
@@ -267,7 +297,7 @@ void KisMask::apply(KisPaintDeviceSP projection, const QRect &applyRect, const Q
             if (!paintsOutsideSelection()) {
                 // extent of m_d->selection should also be accessed under a lock,
                 // because it might be being merged in by the temporary target atm
-                effectiveExtent = effectiveSelection->selectedRect();
+                QRect effectiveExtent = m_d->selection->selectedRect();
 
                 if (hasTemporaryTarget()) {
                     effectiveExtent |= temporaryTarget()->extent();
@@ -279,8 +309,7 @@ void KisMask::apply(KisPaintDeviceSP projection, const QRect &applyRect, const Q
             }
 
             if (hasTemporaryTarget()) {
-                effectiveSelection = m_d->cachedSelection.getSelection();
-                effectiveSelection->setDefaultBounds(m_d->selection->pixelSelection()->defaultBounds());
+                effectiveSelection = m_d->safeProjection->getDeviceLazy(m_d->selection);
 
                 KisPainter::copyAreaOptimized(applyRect.topLeft(),
                                               m_d->selection->pixelSelection(),
@@ -289,13 +318,11 @@ void KisMask::apply(KisPaintDeviceSP projection, const QRect &applyRect, const Q
                 KisPainter gc(effectiveSelection->pixelSelection());
                 setupTemporaryPainter(&gc);
                 gc.bitBlt(applyRect.topLeft(), temporaryTarget(), applyRect);
+            } else {
+                m_d->safeProjection->releaseDevice();
             }
-        }
 
-        mergeInMaskInternal(projection, effectiveSelection, applyRect, needRect, maskPos);
-
-        if (effectiveSelection != m_d->selection) {
-            m_d->cachedSelection.putSelection(effectiveSelection);
+            mergeInMaskInternal(projection, effectiveSelection, applyRect, needRect, maskPos);
         }
 
     } else {
@@ -309,7 +336,8 @@ void KisMask::mergeInMaskInternal(KisPaintDeviceSP projection,
                                   const QRect &preparedNeedRect,
                                   KisNode::PositionToFilthy maskPos) const
 {
-    KisPaintDeviceSP cacheDevice = m_d->paintDeviceCache.getDevice(projection);
+    KisCachedPaintDevice::Guard d1(projection, m_d->paintDeviceCache);
+    KisPaintDeviceSP cacheDevice = d1.device();
 
     if (effectiveSelection) {
         QRect updatedRect = decorateRect(projection, cacheDevice, applyRect, maskPos);
@@ -323,8 +351,11 @@ void KisMask::mergeInMaskInternal(KisPaintDeviceSP projection,
 
         decorateRect(cacheDevice, projection, applyRect, maskPos);
     }
+}
 
-    m_d->paintDeviceCache.putDevice(cacheDevice);
+void KisMask::flattenSelectionProjection(KisSelectionSP selection, const QRect &dirtyRect) const
+{
+    selection->updateProjection(dirtyRect);
 }
 
 QRect KisMask::needRect(const QRect &rect,  PositionToFilthy pos) const
@@ -447,7 +478,7 @@ QImage KisMask::createThumbnail(qint32 w, qint32 h)
 void KisMask::testingInitSelection(const QRect &rect, KisLayerSP parentLayer)
 {
     if (parentLayer) {
-        m_d->selection = new KisSelection(new KisSelectionDefaultBounds(parentLayer->paintDevice(), parentLayer->image()));
+        m_d->selection = new KisSelection(new KisSelectionDefaultBounds(parentLayer->paintDevice()));
     } else {
         m_d->selection = new KisSelection();
     }

@@ -50,6 +50,13 @@ public:
     qreal realFps() const;
     qreal framesDroppedPortion() const;
 
+Q_SIGNALS:
+    void sigFrameChanged();
+    void sigPlaybackStarted();
+    void sigPlaybackStopped();
+    void sigPlaybackStatisticsUpdated();
+    void sigFullClipRangeChanged();
+
 public Q_SLOTS:
     void slotUpdate();
     void slotCancelPlayback();
@@ -67,17 +74,12 @@ private Q_SLOTS:
     void slotOnAudioError(const QString &fileName, const QString &message);
 
 
-Q_SIGNALS:
-    void sigFrameChanged();
-    void sigPlaybackStarted();
-    void sigPlaybackStopped();
-    void sigPlaybackStatisticsUpdated();
-    void sigFullClipRangeChanged();
+
 
 private:
     void connectCancelSignals();
     void disconnectCancelSignals();
-    void uploadFrame(int time);
+    void uploadFrame(int time, bool forceSyncAudio);
 
 private:
     struct Private;

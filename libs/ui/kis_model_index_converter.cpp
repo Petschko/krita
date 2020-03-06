@@ -24,6 +24,7 @@
 #include "kis_node_model.h"
 #include "kis_node_manager.h"
 #include "KisReferenceImagesLayer.h"
+#include "KisDecorationsWrapperLayer.h"
 
 
 KisModelIndexConverter::KisModelIndexConverter(KisDummiesFacadeBase *dummiesFacade,
@@ -37,17 +38,18 @@ KisModelIndexConverter::KisModelIndexConverter(KisDummiesFacadeBase *dummiesFaca
 
 inline bool KisModelIndexConverter::checkDummyType(KisNodeDummy *dummy)
 {
-    return !KisNodeManager::isNodeHidden(dummy->node(), !m_showGlobalSelection);
+    return dummy->isGUIVisible(m_showGlobalSelection);
 }
 
 inline bool KisModelIndexConverter::checkDummyMetaObjectType(const QString &type)
 {
-    // TODO: refactor too?
-    if (m_showGlobalSelection) return true;
+    const QString selectionMaskType = KisSelectionMask::staticMetaObject.className();
+    const QString referencesLayerType = KisReferenceImagesLayer::staticMetaObject.className();
+    const QString decorationsLayerType = KisDecorationsWrapperLayer::staticMetaObject.className();
 
-    QString selectionMaskType = KisSelectionMask::staticMetaObject.className();
-    QString referencesLayerType = KisReferenceImagesLayer::staticMetaObject.className();
-    return type != selectionMaskType && type != referencesLayerType;
+    return (type != selectionMaskType || m_showGlobalSelection) &&
+            type != referencesLayerType &&
+            type != decorationsLayerType;
 }
 
 KisNodeDummy* KisModelIndexConverter::dummyFromRow(int row, QModelIndex parent)

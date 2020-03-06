@@ -78,6 +78,11 @@ struct NodeManagerInterface : TimelineFramesModel::NodeManipulationInterface
         m_manager->removeSingleNode(node);
     }
 
+    bool setNodeProperties(KisNodeSP node, KisImageSP image, KisBaseNode::PropertyList properties) const override
+    {
+        return m_manager->trySetNodeProperties(node, image, properties);
+    }
+
 private:
     KisNodeManager *m_manager;
 };
@@ -88,7 +93,7 @@ void TimelineDocker::setCanvas(KoCanvasBase * canvas)
 
     if (m_d->model->hasConnectionToCanvas()) {
         m_d->canvasConnections.clear();
-        m_d->model->setDummiesFacade(0, 0);
+        m_d->model->setDummiesFacade(0, 0, 0);
         m_d->model->setFrameCache(0);
         m_d->model->setAnimationPlayer(0);
         m_d->model->setNodeManipulationInterface(0);
@@ -104,7 +109,9 @@ void TimelineDocker::setCanvas(KoCanvasBase * canvas)
     if(m_d->canvas) {
         KisDocument *doc = static_cast<KisDocument*>(m_d->canvas->imageView()->document());
         KisShapeController *kritaShapeController = dynamic_cast<KisShapeController*>(doc->shapeController());
-        m_d->model->setDummiesFacade(kritaShapeController, m_d->canvas->image());
+        m_d->model->setDummiesFacade(kritaShapeController,
+                                     m_d->canvas->image(),
+                                     m_d->canvas->viewManager()->nodeManager()->nodeDisplayModeAdapter());
 
         slotUpdateFrameCache();
         m_d->model->setAnimationPlayer(m_d->canvas->animationPlayer());

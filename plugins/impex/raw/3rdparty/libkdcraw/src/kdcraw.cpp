@@ -2,7 +2,7 @@
  * @file
  *
  * This file is a part of digiKam project
- * <a href="http://www.digikam.org">http://www.digikam.org</a>
+ * <a href="https://www.digikam.org">https://www.digikam.org</a>
  *
  * @date   2006-12-09
  * @brief  a tread-safe libraw C++ program interface
@@ -450,7 +450,9 @@ bool KDcraw::extractRAWData(const QString& filePath, QByteArray& rawData, DcrawI
     }
     else
     {
-        rawData.resize((int)(raw.imgdata.sizes.iwidth * raw.imgdata.sizes.iheight * sizeof(unsigned short)));
+        int w = raw.imgdata.sizes.iwidth;
+        int h = raw.imgdata.sizes.iheight;
+        rawData.resize(w * h * sizeof(unsigned short));
 
         unsigned short* output = reinterpret_cast<unsigned short*>(rawData.data());
 

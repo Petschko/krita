@@ -33,6 +33,8 @@
 #include "KisImageBarrierLockerWithFeedback.h"
 #include "commands_new/kis_switch_current_time_command.h"
 #include "kis_command_utils.h"
+#include "KisPart.h"
+#include "kis_animation_cache_populator.h"
 
 struct KisTimeBasedItemModel::Private
 {
@@ -281,7 +283,11 @@ bool KisTimeBasedItemModel::removeFrames(const QModelIndexList &indexes)
     return true;
 }
 
-KUndo2Command* KisTimeBasedItemModel::createOffsetFramesCommand(QModelIndexList srcIndexes, const QPoint &offset, bool copyFrames, bool moveEmptyFrames, KUndo2Command *parentCommand)
+KUndo2Command* KisTimeBasedItemModel::createOffsetFramesCommand(QModelIndexList srcIndexes,
+                                                                const QPoint &offset,
+                                                                bool copyFrames,
+                                                                bool moveEmptyFrames,
+                                                                KUndo2Command *parentCommand)
 {
     if (srcIndexes.isEmpty()) return 0;
     if (offset.isNull()) return 0;
@@ -352,7 +358,9 @@ bool KisTimeBasedItemModel::removeFramesAndOffset(QModelIndexList indicesToRemov
                                         parentCommand);
     }
 
-    KisProcessingApplicator::runSingleCommandStroke(m_d->image, parentCommand, KisStrokeJobData::BARRIER);
+    KisProcessingApplicator::runSingleCommandStroke(m_d->image, parentCommand,
+                                                    KisStrokeJobData::BARRIER,
+                                                    KisStrokeJobData::EXCLUSIVE);
     return true;
 }
 
@@ -401,7 +409,8 @@ bool KisTimeBasedItemModel::mirrorFrames(QModelIndexList indexes)
 
     KisProcessingApplicator::runSingleCommandStroke(m_d->image,
                                                     new KisCommandUtils::SkipFirstRedoWrapper(parentCommand.take()),
-                                                    KisStrokeJobData::BARRIER);
+                                                    KisStrokeJobData::BARRIER,
+                                                    KisStrokeJobData::EXCLUSIVE);
     return true;
 }
 
@@ -415,6 +424,12 @@ void KisTimeBasedItemModel::slotInternalScrubPreviewRequested(int time)
 void KisTimeBasedItemModel::setScrubState(bool active)
 {
     if (!m_d->scrubInProgress && active) {
+        const int currentFrame = m_d->image->animationInterface()->currentUITime();
+        const bool hasCurrentFrameInCache = m_d->framesCache->frameStatus(currentFrame) == KisAnimationFrameCache::Cached;
+        if(!hasCurrentFrameInCache) {
+            KisPart::instance()->prioritizeFrameForCache(m_d->image, currentFrame);
+        }
+
         m_d->scrubStartFrame = m_d->activeFrameIndex;
         m_d->scrubInProgress = true;
     }

@@ -89,15 +89,13 @@ void KisToolMeasureOptionsWidget::slotUnitChanged(int index)
 
 void KisToolMeasureOptionsWidget::updateDistance()
 {
-    m_distanceLabel->setText(QString("%1").arg(m_unit.toUserValue(m_distance), 5, 'f', 1));
+    m_distanceLabel->setText(KritaUtils::prettyFormatReal(m_unit.toUserValue(m_distance)));
 }
 
 
 KisToolMeasure::KisToolMeasure(KoCanvasBase * canvas)
     : KisTool(canvas, KisCursor::crossCursor())
 {
-    m_startPos = QPointF(0, 0);
-    m_endPos = QPointF(0, 0);
 }
 
 KisToolMeasure::~KisToolMeasure()

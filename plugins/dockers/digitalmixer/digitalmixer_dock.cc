@@ -3,7 +3,8 @@
  *
  *  This library is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
- *  the Free Software Foundation; version 2.1 of the License.
+ *  the Free Software Foundation; version 2 of the License, or
+ *  (at your option) any later version.
  *
  *  This library is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -19,7 +20,7 @@
 
 #include <QGridLayout>
 #include <QToolButton>
-#include <QSignalMapper>
+#include <KisSignalMapper.h>
 
 #include <klocalizedstring.h>
 
@@ -27,7 +28,7 @@
 #include <KoColorSlider.h>
 #include <KoColorPopupAction.h>
 #include <KoColorSpaceRegistry.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoCanvasBase.h>
 
 #include <kis_color_button.h>
@@ -64,13 +65,13 @@ DigitalMixerDock::DigitalMixerDock( )
 
     // Create the sliders
 
-    QSignalMapper* signalMapperSelectColor = new QSignalMapper(this);
+    KisSignalMapper* signalMapperSelectColor = new KisSignalMapper(this);
     connect(signalMapperSelectColor, SIGNAL(mapped(int)), SLOT(popupColorChanged(int)));
 
-    QSignalMapper* signalMapperColorSlider = new QSignalMapper(this);
+    KisSignalMapper* signalMapperColorSlider = new KisSignalMapper(this);
     connect(signalMapperColorSlider, SIGNAL(mapped(int)), SLOT(colorSliderChanged(int)));
 
-    QSignalMapper* signalMapperTargetColor = new QSignalMapper(this);
+    KisSignalMapper* signalMapperTargetColor = new KisSignalMapper(this);
     connect(signalMapperTargetColor, SIGNAL(mapped(int)), SLOT(targetColorChanged(int)));
 
     for(int i = 0; i < 6; ++i)
@@ -115,8 +116,8 @@ void DigitalMixerDock::setCanvas(KoCanvasBase * canvas)
     m_canvas = canvas;
 
     if (m_canvas) {
-        connect(m_canvas->resourceManager(), SIGNAL(canvasResourceChanged(int, const QVariant&)),
-                this, SLOT(canvasResourceChanged(int, const QVariant&)));
+        connect(m_canvas->resourceManager(), SIGNAL(canvasResourceChanged(int,QVariant)),
+                this, SLOT(canvasResourceChanged(int,QVariant)));
 
         m_tellCanvas=false;
         setCurrentColor(m_canvas->resourceManager()->foregroundColor());
@@ -160,7 +161,7 @@ void DigitalMixerDock::setCurrentColor(const KoColor& color)
 void DigitalMixerDock::canvasResourceChanged(int key, const QVariant& v)
 {
     m_tellCanvas = false;
-    if (key == KoCanvasResourceManager::ForegroundColor)
+    if (key == KoCanvasResourceProvider::ForegroundColor)
         setCurrentColor(v.value<KoColor>());
     m_tellCanvas = true;
 }

@@ -26,12 +26,17 @@
 #include <QString>
 #include <QVariant>
 
+#include <KisSelectionTags.h>
+
 class KisDummiesFacadeBase;
 class KisNodeDummy;
 class KisShapeController;
 class KisModelIndexConverterBase;
 class KisNodeSelectionAdapter;
 class KisNodeInsertionAdapter;
+class KisSelectionActionsAdapter;
+class KisNodeDisplayModeAdapter;
+class KisNodeManager;
 
 /**
  * KisNodeModel offers a Qt model-view compatible view of the node
@@ -70,7 +75,7 @@ public:
         /// Use to communicate a progress report to the section delegate on an action (a value of -1 or a QVariant() disable the progress bar
         ProgressRole,
 
-        /// Speacial activation role which is emitted when the user Atl-clicks on a section
+        /// Special activation role which is emitted when the user Atl-clicks on a section
         /// The item is first activated with ActiveRole, then a separate AlternateActiveRole comes
         AlternateActiveRole,
 
@@ -84,8 +89,18 @@ public:
         // reflect if the item allows an "onto" drop of the given QMimeData*.
         DropEnabled,
 
+        // Instructs the model to activate "select opaque" action,
+        // the selection action (of type SelectionAction) value
+        // is passed via QVariant as integer
+        SelectOpaqueRole,
+
+        // Returns a text explaining why the node has been excluded from
+        // projection rendering. If the node is not excluded, then empty
+        // string is returned
+        DropReasonRole,
+
         /// This is to ensure that we can extend the data role in the future, since it's not possible to add a role after BeginThumbnailRole (due to "Hack")
-        ReservedRole = 99,
+        ReservedRole = Qt::UserRole + 99,
 
         /**
          * For values of BeginThumbnailRole or higher, a thumbnail of the layer of which neither dimension
@@ -101,12 +116,15 @@ public: // from QAbstractItemModel
     KisNodeModel(QObject * parent);
     ~KisNodeModel() override;
 
-    void setDummiesFacade(KisDummiesFacadeBase *dummiesFacade, KisImageWSP image, KisShapeController *shapeController, KisNodeSelectionAdapter *nodeSelectionAdapter, KisNodeInsertionAdapter *nodeInsertionAdapter);
+    void setDummiesFacade(KisDummiesFacadeBase *dummiesFacade,
+                          KisImageWSP image,
+                          KisShapeController *shapeController,
+                          KisSelectionActionsAdapter *selectionActionsAdapter,
+                          KisNodeManager *nodeManager);
     KisNodeSP nodeFromIndex(const QModelIndex &index) const;
     QModelIndex indexFromNode(KisNodeSP node) const;
 
     bool showGlobalSelection() const;
-    
 
 public Q_SLOTS:
     void setShowGlobalSelection(bool value);
@@ -143,7 +161,8 @@ protected Q_SLOTS:
 
     void slotIsolatedModeChanged();
 
-    void updateSettings();
+    void slotNodeDisplayModeChanged(bool showRootNode, bool showGlobalSelectionMask);
+
     void processUpdateQueue();
     void progressPercentageChanged(int, const KisNodeSP);
 

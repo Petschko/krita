@@ -24,8 +24,10 @@
 
 #include "kritaui_export.h"
 
+class KisRegion;
+
 /**
- * KisAsyncAnimationRendererBase is a special class represinting a
+ * KisAsyncAnimationRendererBase is a special class representing a
  * single worker thread inside KisAsyncAnimationRenderDialogBase. It connects
  * the specified image using correct Qt::DirectConnection connections and
  * reacts on them. On sigFrameReady() signal it calls frameCompletedCallback(),
@@ -46,7 +48,7 @@ public:
      * Only \p regionOfInterest is regenerated. If \p regionOfInterest is
      * empty, then entire bounds of the image is regenerated.
      */
-    void startFrameRegeneration(KisImageSP image, int frame, const QRegion &regionOfInterest);
+    void startFrameRegeneration(KisImageSP image, int frame, const KisRegion &regionOfInterest);
 
     /**
      * Convenience overload that regenerates the full image
@@ -102,7 +104,7 @@ protected:
      * NOTE3: In case of failure, notifyFrameCancelled(). The same threading
      *        rules apply.
      */
-    virtual void frameCompletedCallback(int frame, const QRegion &requestedRegion) = 0;
+    virtual void frameCompletedCallback(int frame, const KisRegion &requestedRegion) = 0;
 
     /**
      * @brief frameCancelledCallback is called when the rendering of
@@ -131,7 +133,7 @@ protected:
      * startFrameRegeneration(). Should be used by the derived classes only.
      *
      * Please note that requestedImage() will become null as soon as the user
-     * cancels the processing. That happends in the GUI thread so
+     * cancels the processing. That happens in the GUI thread so
      * frameCompletedCallback() should be extremely careful when requesting the
      * value (check the shared pointer after fetching).
      */

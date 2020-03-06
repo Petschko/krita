@@ -45,15 +45,14 @@
 #include <kis_paint_device.h>
 #include <kis_properties_configuration.h>
 #include <kis_config.h>
-#include <metadata/kis_meta_data_store.h>
-#include <metadata/kis_meta_data_entry.h>
-#include <metadata/kis_meta_data_value.h>
-#include <metadata/kis_meta_data_schema.h>
-#include <metadata/kis_meta_data_schema_registry.h>
-#include <metadata/kis_meta_data_filter_registry_model.h>
-#include <metadata/kis_exif_info_visitor.h>
+#include <kis_meta_data_store.h>
+#include <kis_meta_data_entry.h>
+#include <kis_meta_data_value.h>
+#include <kis_meta_data_schema.h>
+#include <kis_meta_data_schema_registry.h>
+#include <kis_meta_data_filter_registry_model.h>
+#include <kis_exif_info_visitor.h>
 #include <generator/kis_generator_layer.h>
-#include <KisImportExportManager.h>
 #include <KisExportCheckRegistry.h>
 #include "kis_jpeg_converter.h"
 
@@ -69,7 +68,7 @@ KisJPEGExport::~KisJPEGExport()
 {
 }
 
-KisImportExportFilter::ConversionStatus KisJPEGExport::convert(KisDocument *document, QIODevice *io,  KisPropertiesConfigurationSP configuration)
+KisImportExportErrorCode KisJPEGExport::convert(KisDocument *document, QIODevice *io,  KisPropertiesConfigurationSP configuration)
 {
     KisImageSP image = document->savingImage();
     Q_CHECK_PTR(image);
@@ -169,13 +168,8 @@ KisImportExportFilter::ConversionStatus KisJPEGExport::convert(KisDocument *docu
         }
     }
 
-    KisImageBuilder_Result res = kpc.buildFile(io, l, options, metaDataStore.data());
-
-    if (res == KisImageBuilder_RESULT_OK) {
-        return KisImportExportFilter::OK;
-    }
-    dbgFile << " Result =" << res;
-    return KisImportExportFilter::InternalError;
+    KisImportExportErrorCode res = kpc.buildFile(io, l, options, metaDataStore.data());
+    return res;
 }
 
 KisPropertiesConfigurationSP KisJPEGExport::defaultConfiguration(const QByteArray &/*from*/, const QByteArray &/*to*/) const
@@ -233,9 +227,9 @@ KisWdgOptionsJPEG::KisWdgOptionsJPEG(QWidget *parent)
 
     metaDataFilters->setModel(&m_filterRegistryModel);
     qualityLevel->setRange(0, 100, 0);
-    qualityLevel->setSuffix("%");
+    qualityLevel->setSuffix(i18n("%"));
     smoothLevel->setRange(0, 100, 0);
-    smoothLevel->setSuffix("%");
+    smoothLevel->setSuffix(i18n("%"));
 }
 
 

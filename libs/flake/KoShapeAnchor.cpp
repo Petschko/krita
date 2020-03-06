@@ -89,6 +89,7 @@ KoShapeAnchor::~KoShapeAnchor()
     if (d->placementStrategy != 0) {
         delete d->placementStrategy;
     }
+    delete d;
 }
 
 KoShape *KoShapeAnchor::shape() const
@@ -326,8 +327,8 @@ void KoShapeAnchor::saveOdf(KoShapeSavingContext &context) const
     }
 
     if (shape()->parent()) {// an anchor may not yet have been layout-ed
-        QTransform parentMatrix = shape()->parent()->absoluteTransformation(0).inverted();
-        QTransform shapeMatrix = shape()->absoluteTransformation(0);
+        QTransform parentMatrix = shape()->parent()->absoluteTransformation().inverted();
+        QTransform shapeMatrix = shape()->absoluteTransformation();
 
         qreal dx = d->offset.x() - shapeMatrix.dx()*parentMatrix.m11()
                                    - shapeMatrix.dy()*parentMatrix.m21();
@@ -370,7 +371,7 @@ bool KoShapeAnchor::loadOdf(const KoXmlElement &element, KoShapeLoadingContext &
         d->pageNumber = shape()->additionalAttribute("text:anchor-page-number").toInt();
         if (d->pageNumber <= 0) {
             // invalid if the page-number is invalid (OO.org does the same)
-            // see http://bugs.kde.org/show_bug.cgi?id=281869
+            // see https://bugs.kde.org/show_bug.cgi?id=281869
             d->pageNumber = -1;
         }
     } else {

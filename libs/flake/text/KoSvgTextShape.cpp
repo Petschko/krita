@@ -54,40 +54,35 @@
 
 #include <FlakeDebug.h>
 
-struct KoSvgTextShapePrivate : public KoSvgTextChunkShapePrivate
+#include <QSharedData>
+
+class KoSvgTextShape::Private
 {
-    KoSvgTextShapePrivate(KoSvgTextShape *_q)
-        : KoSvgTextChunkShapePrivate(_q)
-    {
-    }
+public:
 
-    KoSvgTextShapePrivate(const KoSvgTextShapePrivate &rhs, KoSvgTextShape *q)
-        : KoSvgTextChunkShapePrivate(rhs, q)
-    {
-    }
-
-    std::vector<std::unique_ptr<QTextLayout>> cachedLayouts;
+    // NOTE: the cache data is shared between all the instances of
+    //       the shape, though it will be reset locally if the
+    //       accessing thread changes
+    std::vector<std::shared_ptr<QTextLayout>> cachedLayouts;
     std::vector<QPointF> cachedLayoutsOffsets;
     QThread *cachedLayoutsWorkingThread = 0;
 
 
-    void clearAssociatedOutlines(KoShape *rootShape);
+    void clearAssociatedOutlines(const KoShape *rootShape);
 
-
-    Q_DECLARE_PUBLIC(KoSvgTextShape)
 };
 
 KoSvgTextShape::KoSvgTextShape()
-    : KoSvgTextChunkShape(new KoSvgTextShapePrivate(this))
+    : KoSvgTextChunkShape()
+    , d(new Private)
 {
-    Q_D(KoSvgTextShape);
     setShapeId(KoSvgTextShape_SHAPEID);
 }
 
 KoSvgTextShape::KoSvgTextShape(const KoSvgTextShape &rhs)
-    : KoSvgTextChunkShape(new KoSvgTextShapePrivate(*rhs.d_func(), this))
+    : KoSvgTextChunkShape(rhs)
+    , d(new Private)
 {
-    Q_D(KoSvgTextShape);
     setShapeId(KoSvgTextShape_SHAPEID);
     // QTextLayout has no copy-ctor, so just relayout everything!
     relayout();
@@ -111,15 +106,14 @@ void KoSvgTextShape::shapeChanged(ChangeType type, KoShape *shape)
     }
 }
 
-void KoSvgTextShape::paintComponent(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintContext)
+void KoSvgTextShape::paintComponent(QPainter &painter, KoShapePaintingContext &paintContext) const
 {
-    Q_D(KoSvgTextShape);
 
     Q_UNUSED(paintContext);
 
     /**
      * HACK ALERT:
-     * QTextLayout should only be accessed from the tread it has been created in.
+     * QTextLayout should only be accessed from the thread it has been created in.
      * If the cached layout has been created in a different thread, we should just
      * recreate the layouts in the current thread to be able to render them.
      */
@@ -128,7 +122,6 @@ void KoSvgTextShape::paintComponent(QPainter &painter, const KoViewConverter &co
         relayout();
     }
 
-    applyConversion(painter, converter);
     for (int i = 0; i < (int)d->cachedLayouts.size(); i++) {
         d->cachedLayouts[i]->draw(&painter, d->cachedLayoutsOffsets[i]);
     }
@@ -147,10 +140,9 @@ void KoSvgTextShape::paintComponent(QPainter &painter, const KoViewConverter &co
     }
 }
 
-void KoSvgTextShape::paintStroke(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintContext)
+void KoSvgTextShape::paintStroke(QPainter &painter, KoShapePaintingContext &paintContext) const
 {
     Q_UNUSED(painter);
-    Q_UNUSED(converter);
     Q_UNUSED(paintContext);
 
     // do nothing! everything is painted in paintComponent()
@@ -158,7 +150,6 @@ void KoSvgTextShape::paintStroke(QPainter &painter, const KoViewConverter &conve
 
 QPainterPath KoSvgTextShape::textOutline()
 {
-    Q_D(KoSvgTextShape);
 
     QPainterPath result;
     result.setFillRule(Qt::WindingFill);
@@ -196,7 +187,7 @@ QPainterPath KoSvgTextShape::textOutline()
                     QPainterPath path;
                     path.addRect(overlineBlob);
 
-                    // don't use direct addRect, because it does't care about Qt::WindingFill
+                    // don't use direct addRect, because it doesn't care about Qt::WindingFill
                     result += path;
                 }
 
@@ -209,7 +200,7 @@ QPainterPath KoSvgTextShape::textOutline()
                     QPainterPath path;
                     path.addRect(strikeThroughBlob);
 
-                    // don't use direct addRect, because it does't care about Qt::WindingFill
+                    // don't use direct addRect, because it doesn't care about Qt::WindingFill
                     result += path;
                 }
 
@@ -221,7 +212,7 @@ QPainterPath KoSvgTextShape::textOutline()
                     QPainterPath path;
                     path.addRect(underlineBlob);
 
-                    // don't use direct addRect, because it does't care about Qt::WindingFill
+                    // don't use direct addRect, because it doesn't care about Qt::WindingFill
                     result += path;
                 }
             }
@@ -331,6 +322,8 @@ struct LayoutChunkWrapper
         KIS_SAFE_ASSERT_RECOVER_RETURN_VALUE(startPos == m_addedChars, currentTextPos);
         KIS_SAFE_ASSERT_RECOVER_RETURN_VALUE(lastPos < m_layout->text().size(), currentTextPos);
 
+        //        qDebug() << m_layout->text();
+
         QTextLine line;
         std::swap(line, m_danglingLine);
 
@@ -346,9 +339,26 @@ struct LayoutChunkWrapper
         }
 
         if (startPos <= lastPos) {
+            // defines the number of columns to look for glyphs
             const int numChars = lastPos - startPos + 1;
+            // Tabs break the normal column flow
+            // grow to avoid missing glyphs
 
-            line.setNumColumns(numChars);
+            int charOffset = 0;
+            int noChangeCount = 0;
+            while (line.textLength() < numChars) {
+                int tl = line.textLength();
+                line.setNumColumns(numChars + charOffset);
+                if (tl == line.textLength()) {
+                    noChangeCount++;
+                    // 5 columns max are needed to discover tab char. Set to 10 to be safe.
+                    if (noChangeCount > 10) break;
+                } else {
+                    noChangeCount = 0;
+                }
+                charOffset++;
+            }
+
             line.setPosition(currentTextPos - QPointF(0, line.ascent()));
             currentTextPos.rx() += line.horizontalAdvance();
 
@@ -369,13 +379,17 @@ struct LayoutChunkWrapper
 private:
     qreal skipSpaceCharacter(int pos) {
         const QTextCharFormat format =
-            formatForPos(pos, m_layout->formats());
+                formatForPos(pos, m_layout->formats());
 
         const QChar skippedChar = m_layout->text()[pos];
         KIS_SAFE_ASSERT_RECOVER_NOOP(skippedChar.isSpace() || !skippedChar.isPrint());
 
         QFontMetrics metrics(format.font());
+#if QT_VERSION >= QT_VERSION_CHECK(5,11,0)
+        return metrics.horizontalAdvance(skippedChar);
+#else
         return metrics.width(skippedChar);
+#endif
     }
 
     static QTextCharFormat formatForPos(int pos, const QVector<QTextLayout::FormatRange> &formats)
@@ -397,9 +411,8 @@ private:
     QTextLine m_danglingLine;
 };
 
-void KoSvgTextShape::relayout()
+void KoSvgTextShape::relayout() const
 {
-    Q_D(KoSvgTextShape);
 
     d->cachedLayouts.clear();
     d->cachedLayoutsOffsets.clear();
@@ -410,7 +423,7 @@ void KoSvgTextShape::relayout()
     QVector<TextChunk> textChunks = mergeIntoChunks(layoutInterface()->collectSubChunks());
 
     Q_FOREACH (const TextChunk &chunk, textChunks) {
-        std::unique_ptr<QTextLayout> layout(new QTextLayout());
+        std::shared_ptr<QTextLayout> layout(new QTextLayout());
 
         QTextOption option;
 
@@ -440,9 +453,9 @@ void KoSvgTextShape::relayout()
             const bool isFinalPass = i == chunk.offsets.size();
 
             const int length =
-                !isFinalPass ?
-                chunk.offsets[i].start - lastSubChunkStart :
-                chunk.text.size() - lastSubChunkStart;
+                    !isFinalPass ?
+                        chunk.offsets[i].start - lastSubChunkStart :
+                        chunk.text.size() - lastSubChunkStart;
 
             if (length > 0) {
                 currentTextPos += lastSubChunkOffset;
@@ -472,7 +485,7 @@ void KoSvgTextShape::relayout()
             diff.ry() = 0;
         }
 
-        d->cachedLayouts.push_back(std::move(layout));
+        d->cachedLayouts.push_back(layout);
         d->cachedLayoutsOffsets.push_back(-diff);
 
     }
@@ -487,7 +500,7 @@ void KoSvgTextShape::relayout()
 
         Q_FOREACH (const QTextLayout::FormatRange &range, layout.formats()) {
             const KoSvgCharChunkFormat &format =
-                static_cast<const KoSvgCharChunkFormat&>(range.format);
+                    static_cast<const KoSvgCharChunkFormat&>(range.format);
             AssociatedShapeWrapper wrapper = format.associatedShapeWrapper();
 
             const int rangeStart = range.start;
@@ -547,9 +560,9 @@ void KoSvgTextShape::relayout()
     }
 }
 
-void KoSvgTextShapePrivate::clearAssociatedOutlines(KoShape *rootShape)
+void KoSvgTextShape::Private::clearAssociatedOutlines(const KoShape *rootShape)
 {
-    KoSvgTextChunkShape *chunkShape = dynamic_cast<KoSvgTextChunkShape*>(rootShape);
+    const KoSvgTextChunkShape *chunkShape = dynamic_cast<const KoSvgTextChunkShape*>(rootShape);
     KIS_SAFE_ASSERT_RECOVER_RETURN(chunkShape);
 
     chunkShape->layoutInterface()->clearAssociatedOutline();
@@ -590,7 +603,7 @@ KoShape *KoSvgTextShapeFactory::createDefaultShape(KoDocumentResourceManager *do
     converter.convertFromSvg("<text>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</text>",
                              "<defs/>",
                              QRectF(0, 0, 200, 60),
-                             documentResources->shapeController()->pixelsPerInch());
+                             documentResources->documentResolution());
 
     debugFlake << converter.errors() << converter.warnings();
 
@@ -611,14 +624,12 @@ KoShape *KoSvgTextShapeFactory::createShape(const KoProperties *params, KoDocume
         shapeRect = rect.toRectF();
     }
 
-
     KoSvgTextShapeMarkupConverter converter(shape);
     converter.convertFromSvg(svgText,
                              defs,
                              shapeRect,
-                             documentResources->shapeController()->pixelsPerInch());
+                             documentResources->documentResolution());
 
-    shape->setBackground(QSharedPointer<KoColorBackground>(new KoColorBackground(QColor(Qt::black))));
     shape->setPosition(shapeRect.topLeft());
 
     return shape;

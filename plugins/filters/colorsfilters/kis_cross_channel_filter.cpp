@@ -221,7 +221,7 @@ KisCrossChannelFilter::KisCrossChannelFilter() : KisMultiChannelFilter(id(), i18
 KisCrossChannelFilter::~KisCrossChannelFilter()
 {}
 
-KisConfigWidget * KisCrossChannelFilter::createConfigurationWidget(QWidget *parent, const KisPaintDeviceSP dev) const
+KisConfigWidget * KisCrossChannelFilter::createConfigurationWidget(QWidget *parent, const KisPaintDeviceSP dev, bool) const
 {
     return new KisCrossChannelConfigWidget(parent, dev);
 }
@@ -262,9 +262,10 @@ KoColorTransformation* KisCrossChannelFilter::createTransformation(const KoColor
     const QList<KisCubicCurve> &curves = configBC->curves();
     const QVector<int> &drivers = configBC->driverChannels();
 
-    const QVector<VirtualChannelInfo> virtualChannels = KisMultiChannelFilter::getVirtualChannels(cs);
+    const QVector<VirtualChannelInfo> virtualChannels =
+        KisMultiChannelFilter::getVirtualChannels(cs, originalTransfers.size());
 
-    if (originalTransfers.size() != int(virtualChannels.size())) {
+    if (originalTransfers.size() > int(virtualChannels.size())) {
         // We got an illegal number of colorchannels :(
         return 0;
     }

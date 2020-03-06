@@ -36,7 +36,6 @@
 #include <kis_paint_action_type_option.h>
 #include <kis_compositeop_option.h>
 #include "kis_texture_option.h"
-#include "kis_curve_option_widget.h"
 #include <kis_pressure_mirror_option_widget.h>
 #include "kis_pressure_texture_strength_option.h"
 
@@ -93,7 +92,7 @@ KisHatchingPaintOpSettingsWidget:: KisHatchingPaintOpSettingsWidget(QWidget* par
     /*More things I know by reading the XML tree. At this point you can just read it with:
     dbgKrita << xMLAnalyzer.toString() ;
     those QDomElements are the way to navigate the XML tree, read
-    http://doc.qt.nokia.com/latest/qdomdocument.html for more information */
+    https://doc.qt.io/qt-5/qdomdocument.html for more information */
     QDomElement firstTag = xMLAnalyzer.documentElement();
     QDomElement firstTagsChild = firstTag.elementsByTagName("MaskGenerator").item(0).toElement();
 

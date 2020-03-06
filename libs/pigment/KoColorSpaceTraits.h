@@ -65,6 +65,9 @@ struct KoColorSpaceTrait {
     /// the number of bit for each channel
     static const int depth = KoColorSpaceMathsTraits<_channels_type_>::bits;
 
+    /// the associated math class
+    typedef KoColorSpaceMathsTraits<_channels_type_> math_trait;
+
     /**
      * @return the size in byte of one pixel
      */
@@ -152,7 +155,7 @@ struct KoColorSpaceTrait {
     }
 
     inline static void normalisedChannelsValue(const quint8 *pixel, QVector<float> &channels) {
-        Q_ASSERT((int)channels.count() == (int)channels_nb);
+        Q_ASSERT((int)channels.count() >= (int)channels_nb);
         channels_type c;
         for (uint i = 0; i < channels_nb; i++) {
             c = nativeArray(pixel)[i];
@@ -161,7 +164,7 @@ struct KoColorSpaceTrait {
     }
 
     inline static void fromNormalisedChannelsValue(quint8 *pixel, const QVector<float> &values) {
-        Q_ASSERT((int)values.count() == (int)channels_nb);
+        Q_ASSERT((int)values.count() >= (int)channels_nb);
         channels_type c;
         for (uint i = 0; i < channels_nb; i++) {
             float b = qBound((float)KoColorSpaceMathsTraits<channels_type>::min,

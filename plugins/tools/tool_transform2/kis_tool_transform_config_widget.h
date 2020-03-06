@@ -37,7 +37,6 @@ public:
     void resetRotationCenterButtons();
     void setDefaultWarpPoints(int pointsPerLine = -1);
     void setTooBigLabelVisible(bool value);
-    bool showDecorations() const;
     bool workRecursively() const;
 
 public Q_SLOTS:
@@ -111,6 +110,9 @@ public Q_SLOTS:
     void slotLiquifyModeChanged(int value);
 
     void notifyEditingFinished();
+
+    void slotGranularityChanged(QString value);
+    void slotPreviewGranularityChanged(QString value);
 
 private:
     // rad being in |R, the returned value is in [0; 360]

@@ -80,6 +80,10 @@ public:
         return m_lod;
     }
 
+    QString debugName() const override {
+        return "KisNoopSpontaneousJob";
+    }
+
 private:
     bool m_overridesEverything;
     int m_lod;
@@ -112,6 +116,10 @@ public:
 
     bool isMarked() const {
         return m_isMarked;
+    }
+
+    QString debugId() const override {
+        return "KisNoopDabStrategy";
     }
 
 private:
@@ -176,11 +184,15 @@ public:
         }
     }
 
-    virtual QString name(KisStrokeJobData *data) const {
+    virtual QString name(KisStrokeJobData *data) const override {
         const QString baseName = KisNoopDabStrategy::name(data);
 
         KisTestingStrokeJobData *td = dynamic_cast<KisTestingStrokeJobData*>(data);
         return !td || td->m_customSuffix.isEmpty() ? baseName : QString("%1_%2").arg(baseName).arg(td->m_customSuffix);
+    }
+
+    QString debugId() const override {
+        return "KisMutatableDabStrategy";
     }
 
 private:
@@ -191,7 +203,7 @@ private:
 class KisTestingStrokeStrategy : public KisStrokeStrategy
 {
 public:
-    KisTestingStrokeStrategy(const QString &prefix = QString(),
+    KisTestingStrokeStrategy(const QLatin1String &prefix = QLatin1String(),
                              bool exclusive = false,
                              bool inhibitServiceJobs = false,
                              bool forceAllowInitJob = false,

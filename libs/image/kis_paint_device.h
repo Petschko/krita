@@ -45,6 +45,7 @@ class KoColor;
 class KoColorSpace;
 class KoColorProfile;
 
+class KisRegion;
 class KisDataManager;
 class KisPaintDeviceWriter;
 class KisKeyframe;
@@ -107,6 +108,8 @@ public:
      */
     KisPaintDevice(const KisPaintDevice& rhs, KritaUtils::DeviceCopyMode copyMode = KritaUtils::CopySnapshot, KisNode *newParentNode = 0);
     ~KisPaintDevice() override;
+
+    void makeFullCopyFrom(const KisPaintDevice& rhs, KritaUtils::DeviceCopyMode copyMode = KritaUtils::CopySnapshot, KisNode *newParentNode = 0);
 
 protected:
     /**
@@ -252,13 +255,13 @@ public:
      * For tiled data manager, it region will consist of a number
      * of rects each corresponding to a tile.
      */
-    QRegion region() const;
+    KisRegion region() const;
 
     /**
      * The slow version of region() that searches for exact bounds of
      * each rectangle in the region
      */
-    QRegion regionExact() const;
+    KisRegion regionExact() const;
 
     /**
      * Cut the paint device down to the specified rect. If the crop
@@ -317,7 +320,7 @@ public:
 public:
 
     /**
-     * Prepares the device for fastBitBlt opreration. It clears
+     * Prepares the device for fastBitBlt operation. It clears
      * the device, switches x,y shifts and colorspace if needed.
      * After this call fastBitBltPossible will return true.
      * May be used for initialization of temporary devices.
@@ -362,7 +365,7 @@ protected:
     /**
      * Checks whether a src paint device can be used as source
      * of fast bitBlt operation. The result of the check may
-     * depend on whether color spaces coinside, whether there is
+     * depend on whether color spaces coincide, whether there is
      * any shift of tiles between the devices and etc.
      *
      * WARNING: This check must be done <i>before</i> performing any
@@ -480,35 +483,39 @@ public:
 
     /**
      * Converts the paint device to a different colorspace
-     *
-     * @return a command that can be used to undo the conversion.
      */
-    KUndo2Command* convertTo(const KoColorSpace * dstColorSpace,
-                             KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
-                             KoColorConversionTransformation::ConversionFlags conversionFlags = KoColorConversionTransformation::internalConversionFlags());
+    void convertTo(const KoColorSpace * dstColorSpace,
+                   KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
+                   KoColorConversionTransformation::ConversionFlags conversionFlags = KoColorConversionTransformation::internalConversionFlags(),
+                   KUndo2Command *parentCommand = 0);
 
     /**
      * Changes the profile of the colorspace of this paint device to the given
      * profile. If the given profile is 0, nothing happens.
      */
-    bool setProfile(const KoColorProfile * profile);
+    bool setProfile(const KoColorProfile * profile, KUndo2Command *parentCommand);
 
     /**
      * Fill this paint device with the data from image; starting at (offsetX, offsetY)
-     * @param srcProfileName name of the RGB profile to interpret the image as. 0 is interpreted as sRGB
+     * @param image the image
+     * @param profile name of the RGB profile to interpret the image as. 0 is interpreted as sRGB
+     * @param offsetX x offset
+     * @param offsetY y offset
      */
     void convertFromQImage(const QImage& image, const KoColorProfile *profile, qint32 offsetX = 0, qint32 offsetY = 0);
 
     /**
      * Create an RGBA QImage from a rectangle in the paint device.
      *
+     * @param dstProfile RGB profile to use in conversion. May be 0, in which
+     * case it's up to the color strategy to choose a profile (most
+     * like sRGB).
      * @param x Left coordinate of the rectangle
      * @param y Top coordinate of the rectangle
      * @param w Width of the rectangle in pixels
      * @param h Height of the rectangle in pixels
-     * @param dstProfile RGB profile to use in conversion. May be 0, in which
-     * case it's up to the color strategy to choose a profile (most
-     * like sRGB).
+     * @param renderingIntent Rendering intent
+     * @param conversionFlags Conversion flags
      */
     QImage convertToQImage(const KoColorProfile *dstProfile, qint32 x, qint32 y, qint32 w, qint32 h,
                            KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
@@ -529,6 +536,8 @@ public:
      * @param dstProfile RGB profile to use in conversion. May be 0, in which
      * case it's up to the color strategy to choose a profile (most
      * like sRGB).
+     * @param renderingIntent Rendering intent
+     * @param conversionFlags Conversion flags
      */
     QImage convertToQImage(const KoColorProfile *  dstProfile,
                            KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
@@ -539,9 +548,10 @@ public:
      * the aspect ratio. The width and height of the returned device
      * won't exceed \p maxw and \p maxw, but they may be smaller.
      *
-     * @param maxw: maximum width
-     * @param maxh: maximum height
-     * @param rect: only this rect will be used for the thumbnail
+     * @param w maximum width
+     * @param h maximum height
+     * @param rect only this rect will be used for the thumbnail
+     * @param outputRect output rectangle
      *
      */
     KisPaintDeviceSP createThumbnailDevice(qint32 w, qint32 h, QRect rect = QRect(), QRect outputRect = QRect()) const;
@@ -556,6 +566,8 @@ public:
      * @param maxh: maximum height
      * @param rect: only this rect will be used for the thumbnail
      * @param oversample: ratio used for antialiasing
+     * @param renderingIntent Rendering intent
+     * @param conversionFlags Conversion flags
      */
     QImage createThumbnail(qint32 maxw, qint32 maxh, QRect rect, qreal oversample = 1,
                            KoColorConversionTransformation::Intent renderingIntent = KoColorConversionTransformation::internalRenderingIntent(),
@@ -720,8 +732,7 @@ public:
     /**
      * Create a keyframe channel for the content on this device.
      * @param id identifier for the channel
-     * @param node the parent node for the channel
-     * @return keyframe channel
+     * @return keyframe channel or 0 if there is not one
      */
     KisRasterKeyframeChannel *createKeyframeChannel(const KoID &id);
 
@@ -740,11 +751,7 @@ public:
      */
     void setDirty(const QRect & rc);
 
-    /**
-     *  Add the specified region to the parent layer's dirty region
-     *  (if there is a parent layer)
-     */
-    void setDirty(const QRegion & region);
+    void setDirty(const KisRegion &region);
 
     /**
      *  Set the parent layer completely dirty, if this paint device has
@@ -752,7 +759,7 @@ public:
      */
     void setDirty();
 
-    void setDirty(const QVector<QRect> rects);
+    void setDirty(const QVector<QRect> &rects);
 
     /**
      * Called by KisTransactionData when it thinks current time should
@@ -786,20 +793,25 @@ public:
      * Create an iterator that will "artificially" extend the paint device with the
      * value of the border when trying to access values outside the range of data.
      *
-     * @param rc indicates the rectangle that truly contains data
+     * @param x x of top left corner
+     * @param y y of top left corner
+     * @param w width of the border
+     * @param _dataWidth indicates the rectangle that truly contains data
      */
     KisRepeatHLineConstIteratorSP createRepeatHLineConstIterator(qint32 x, qint32 y, qint32 w, const QRect& _dataWidth) const;
     /**
      * Create an iterator that will "artificially" extend the paint device with the
      * value of the border when trying to access values outside the range of data.
      *
-     * @param rc indicates the rectangle that trully contains data
+     * @param x x of top left corner
+     * @param y y of top left corner
+     * @param h height of the border
+     * @param _dataWidth indicates the rectangle that truly contains data
      */
     KisRepeatVLineConstIteratorSP createRepeatVLineConstIterator(qint32 x, qint32 y, qint32 h, const QRect& _dataWidth) const;
 
     /**
      * This function create a random accessor which can easily access to sub pixel values.
-     * @param selection an up-to-date selection that has the same origin as the paint device
      */
     KisRandomSubAccessorSP createRandomSubAccessor() const;
 
@@ -837,7 +849,7 @@ public:
         virtual ~LodDataStruct();
     };
 
-    QRegion regionForLodSyncing() const;
+    KisRegion regionForLodSyncing() const;
     LodDataStruct* createLodDataStruct(int lod);
     void updateLodDataStruct(LodDataStruct *dst, const QRect &srcRect);
     void uploadLodDataStruct(LodDataStruct *dst);

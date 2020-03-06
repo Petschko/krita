@@ -1,5 +1,6 @@
 /*
  *  Copyright (c) 2004 Boudewijn Rempt <boud@valdyas.org>
+ *  Copyright (c) 2020 L. E. Segovia <amy@amyspark.me>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -79,6 +80,7 @@ public:
      * @param channelValueType type of the numerical data used by the channel
      * @param size number of bytes (not bits) of the channel (if -1, it is deduced from the channelType)
      * @param color a color to represent that channel (for instance in an histogram)
+     * @param uiMinMax the UI range
      */
     KoChannelInfo(const QString & name,
                   qint32 npos,
@@ -258,6 +260,15 @@ public:
      */
     inline double getUIMax(void) const {
         return m_uiMinMax.maxVal;
+    }
+
+    /**
+     * @brief getUIUnitValue
+     * Gets the unit value for this channel.
+     * This is suitable for converting between representations.
+     */
+    inline double getUIUnitValue(void) const {
+        return m_uiMinMax.maxVal - m_uiMinMax.minVal;
     }
 
 private:

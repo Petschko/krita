@@ -26,6 +26,7 @@ class KisToolLineHelper : private KisToolFreehandHelper
 {
 public:
     KisToolLineHelper(KisPaintingInformationBuilder *infoBuilder,
+                      KoCanvasResourceProvider *resourceManager,
                       const KUndo2MagicString &transactionText);
 
     ~KisToolLineHelper() override;
@@ -33,19 +34,22 @@ public:
     void setEnabled(bool value);
     void setUseSensors(bool value);
 
-    void repaintLine(KoCanvasResourceManager *resourceManager,
-                     KisImageWSP image,
+    void repaintLine(KisImageWSP image,
                      KisNodeSP node,
                      KisStrokesFacade *strokesFacade);
 
-    void start(KoPointerEvent *event, KoCanvasResourceManager *resourceManager);
+    void start(KoPointerEvent *event, KoCanvasResourceProvider *resourceManager);
     void addPoint(KoPointerEvent *event, const QPointF &overridePos = QPointF());
     void translatePoints(const QPointF &offset);
     void end();
     void cancel();
+    void clearPoints();
     void clearPaint();
 
     using KisToolFreehandHelper::isRunning;
+
+private:
+    void adjustPointsToDDA(QVector<KisPaintInformation> &points);
 
 private:
     struct Private;

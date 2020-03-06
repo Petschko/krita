@@ -31,7 +31,11 @@
 
 KisColorSelectorWheel::KisColorSelectorWheel(KisColorSelector *parent) :
     KisColorSelectorComponent(parent),
-    m_lastClickPos(-1,-1)
+    m_lastClickPos(-1,-1),
+    m_renderAreaSize(1,1),
+    m_renderAreaOffsetX(0.0),
+    m_renderAreaOffsetY(0.0),
+    m_toRenderArea(QTransform())
 {
 }
 
@@ -170,6 +174,8 @@ void KisColorSelectorWheel::setColor(const KoColor &color)
 
         setLastMousePosition(pos.x(), pos.y());
     }
+
+    KisColorSelectorComponent::setColor(color);
 }
 
 void KisColorSelectorWheel::paint(QPainter* painter)
@@ -186,6 +192,12 @@ void KisColorSelectorWheel::paint(QPainter* painter)
         tmpPainter.setCompositionMode(QPainter::CompositionMode_Clear);
         int size=qMin(width(), height());
 
+        m_renderAreaSize = QSize(size,size);
+        m_renderAreaOffsetX = ((qreal)width()-(qreal)m_renderAreaSize.width())*0.5;
+        m_renderAreaOffsetY = ((qreal)height()-(qreal)m_renderAreaSize.height())*0.5;
+        m_toRenderArea.reset();
+        m_toRenderArea.translate(-m_renderAreaOffsetX,-m_renderAreaOffsetY);
+
         QPoint ellipseCenter(width() / 2 - size / 2, height() / 2 - size / 2);
         ellipseCenter -= m_pixelCacheOffset;
 
@@ -193,6 +205,36 @@ void KisColorSelectorWheel::paint(QPainter* painter)
     }
 
     painter->drawImage(m_pixelCacheOffset.x(),m_pixelCacheOffset.y(), m_pixelCache);
+
+    // draw gamut mask
+    if (m_gamutMaskOn && m_currentGamutMask) {
+        QImage maskBuffer  = QImage(m_renderAreaSize.width(), m_renderAreaSize.height(), QImage::Format_ARGB32_Premultiplied);
+        maskBuffer.fill(0);
+        QPainter maskPainter(&maskBuffer);
+
+        QRect rect = QRect(0, 0, m_renderAreaSize.width(), m_renderAreaSize.height());
+        maskPainter.setRenderHint(QPainter::Antialiasing, true);
+
+        maskPainter.resetTransform();
+        maskPainter.translate(rect.width()/2, rect.height()/2);
+        maskPainter.scale(rect.width()/2, rect.height()/2);
+
+        maskPainter.setPen(QPen(QBrush(Qt::white), 0.002));
+        maskPainter.setBrush(QColor(128,128,128,255)); // middle gray
+
+        maskPainter.drawEllipse(QPointF(0,0), 1.0, 1.0);
+
+        maskPainter.resetTransform();
+        maskPainter.setTransform(m_currentGamutMask->maskToViewTransform(m_renderAreaSize.width()));
+
+        maskPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        m_currentGamutMask->paint(maskPainter, m_maskPreviewActive);
+
+        maskPainter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        m_currentGamutMask->paintStroke(maskPainter, m_maskPreviewActive);
+
+        painter->drawImage(m_renderAreaOffsetX, m_renderAreaOffsetY, maskBuffer);
+    }
 
     // draw blips
 
@@ -266,4 +308,17 @@ KoColor KisColorSelectorWheel::colorAt(int x, int y, bool forceValid)
         return color;
     }
     return color;
+}
+
+bool KisColorSelectorWheel::allowsColorSelectionAtPoint(const QPoint &pt) const
+{
+    if (!m_gamutMaskOn || !m_currentGamutMask) {
+        return true;
+    }
+
+    QPointF colorCoord = m_toRenderArea.map(QPointF(pt));
+    QPointF translatedPoint = m_currentGamutMask->viewToMaskTransform(m_renderAreaSize.width()).map(colorCoord);
+    bool isClear = m_currentGamutMask->coordIsClear(translatedPoint, m_maskPreviewActive);
+
+    return isClear;
 }

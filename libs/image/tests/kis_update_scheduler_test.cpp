@@ -61,7 +61,7 @@ KisImageSP KisUpdateSchedulerTest::buildTestingImage()
     paintLayer1->paintDevice()->convertFromQImage(sourceImage1, 0, 0, 0);
     paintLayer2->paintDevice()->convertFromQImage(sourceImage2, 0, 0, 0);
 
-    image->lock();
+    image->barrierLock();
     image->addNode(paintLayer1);
     image->addNode(paintLayer2);
     image->addNode(blur1);
@@ -168,15 +168,14 @@ void KisUpdateSchedulerTest::testLocking()
     QCOMPARE(imageRect, QRect(0,0,640,441));
 
     KisTestableUpdateScheduler scheduler(image.data(), 2);
+    KisUpdaterContext *context = scheduler.updaterContext();
+    QVERIFY(context);
+    QVector<KisUpdateJobItem*> jobs;
 
     QRect dirtyRect1(0,0,50,100);
     QRect dirtyRect2(0,0,100,100);
     QRect dirtyRect3(50,0,50,100);
     QRect dirtyRect4(150,150,50,50);
-
-
-    KisTestableUpdaterContext *context = scheduler.updaterContext();
-    QVector<KisUpdateJobItem*> jobs;
 
     scheduler.updateProjection(paintLayer1, imageRect, imageRect);
 
@@ -220,7 +219,7 @@ void KisUpdateSchedulerTest::testExclusiveStrokes()
     QRect dirtyRect1(0,0,50,100);
 
     KisTestableUpdateScheduler scheduler(image.data(), 2);
-    KisTestableUpdaterContext *context = scheduler.updaterContext();
+    KisUpdaterContext *context = scheduler.updaterContext();
     QVector<KisUpdateJobItem*> jobs;
 
     scheduler.updateProjection(paintLayer1, dirtyRect1, imageRect);
@@ -230,7 +229,7 @@ void KisUpdateSchedulerTest::testExclusiveStrokes()
     QCOMPARE(jobs[1]->isRunning(), false);
     QVERIFY(checkWalker(jobs[0]->walker(), dirtyRect1));
 
-    KisStrokeId id = scheduler.startStroke(new KisTestingStrokeStrategy("excl_", true, false));
+    KisStrokeId id = scheduler.startStroke(new KisTestingStrokeStrategy(QLatin1String("excl_"), true, false));
 
     jobs = context->getJobs();
     QCOMPARE(jobs[0]->isRunning(), true);
@@ -273,7 +272,7 @@ void KisUpdateSchedulerTest::testEmptyStroke()
 {
     KisImageSP image = buildTestingImage();
 
-    KisStrokeId id = image->startStroke(new KisStrokeStrategy());
+    KisStrokeId id = image->startStroke(new KisStrokeStrategy(QLatin1String()));
     image->addJob(id, 0);
     image->endStroke(id);
     image->waitForDone();

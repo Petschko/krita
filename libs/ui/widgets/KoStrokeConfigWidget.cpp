@@ -38,7 +38,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QSizePolicy>
-#include <QSignalMapper>
+#include <KisSignalMapper.h>
 
 // KDE
 #include <klocalizedstring.h>
@@ -57,7 +57,7 @@
 #include <KoPathShapeMarkerCommand.h>
 #include <KoCanvasBase.h>
 #include <KoCanvasController.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoDocumentResourceManager.h>
 #include <KoSelection.h>
 #include <KoShapeController.h>
@@ -66,10 +66,10 @@
 #include <KoSelectedShapesProxy.h>
 #include "ui_KoStrokeConfigWidget.h"
 #include <KoFlakeUtils.h>
-#include <KoCanvasBase.h>
 #include <KoFillConfigWidget.h>
 #include "kis_canvas_resource_provider.h"
 #include "kis_acyclic_signal_connector.h"
+#include <kis_signal_compressor.h>
 
 // Krita
 #include "kis_double_parse_unit_spin_box.h"
@@ -80,9 +80,9 @@ public:
     CapNJoinMenu(QWidget *parent = 0);
     QSize sizeHint() const override;
 
-    KisDoubleParseUnitSpinBox *miterLimit;
-    QButtonGroup        *capGroup;
-    QButtonGroup        *joinGroup;
+    KisDoubleParseUnitSpinBox *miterLimit {0};
+    QButtonGroup *capGroup {0};
+    QButtonGroup *joinGroup {0};
 };
 
 CapNJoinMenu::CapNJoinMenu(QWidget *parent)
@@ -91,7 +91,7 @@ CapNJoinMenu::CapNJoinMenu(QWidget *parent)
     QGridLayout *mainLayout = new QGridLayout();
     mainLayout->setMargin(2);
 
-     // The cap group
+    // The cap group
     capGroup = new QButtonGroup(this);
     capGroup->setExclusive(true);
 
@@ -166,34 +166,31 @@ class Q_DECL_HIDDEN KoStrokeConfigWidget::Private
 {
 public:
     Private()
-        : canvas(0),
-        active(true),
-        allowLocalUnitManagement(true),
-        fillConfigWidget(0),
-        noSelectionTrackingMode(false)
+        : selectionChangedCompressor(200, KisSignalCompressor::FIRST_ACTIVE)
     {
     }
 
-    KoLineStyleSelector *lineStyle;
-    KisDoubleParseUnitSpinBox *lineWidth;
-    KoMarkerSelector    *startMarkerSelector;
-    KoMarkerSelector    *midMarkerSelector;
-    KoMarkerSelector    *endMarkerSelector;
+    KoLineStyleSelector *lineStyle {0};
+    KisDoubleParseUnitSpinBox *lineWidth {0};
+    KoMarkerSelector *startMarkerSelector {0};
+    KoMarkerSelector *midMarkerSelector {0};
+    KoMarkerSelector *endMarkerSelector {0};
 
-   CapNJoinMenu *capNJoinMenu;
+    CapNJoinMenu *capNJoinMenu {0};
 
-    QWidget *spacer;
+    QWidget*spacer {0};
 
-    KoCanvasBase *canvas;
+    KoCanvasBase *canvas {0};
 
-    bool active;
-    bool allowLocalUnitManagement;
+    bool active {true};
+    bool allowLocalUnitManagement {false};
 
-    KoFillConfigWidget *fillConfigWidget;
-    bool noSelectionTrackingMode;
+    KoFillConfigWidget *fillConfigWidget {0};
+    bool noSelectionTrackingMode {false};
 
     KisAcyclicSignalConnector shapeChangedAcyclicConnector;
     KisAcyclicSignalConnector resourceManagerAcyclicConnector;
+    KisSignalCompressor selectionChangedCompressor;
 
     std::vector<KisAcyclicSignalConnector::Blocker> deactivationLocks;
 
@@ -205,7 +202,7 @@ KoStrokeConfigWidget::KoStrokeConfigWidget(KoCanvasBase *canvas, QWidget * paren
     : QWidget(parent)
     , d(new Private())
 {
-    // confure GUI
+    // configure GUI
     d->ui = new Ui_KoStrokeConfigWidget();
     d->ui->setupUi(this);
 
@@ -213,34 +210,35 @@ KoStrokeConfigWidget::KoStrokeConfigWidget(KoCanvasBase *canvas, QWidget * paren
 
     { // connect the canvas
         d->shapeChangedAcyclicConnector.connectBackwardVoid(
-            canvas->selectedShapesProxy(), SIGNAL(selectionChanged()),
-            this, SLOT(selectionChanged()));
+                    canvas->selectedShapesProxy(), SIGNAL(selectionChanged()),
+                    &d->selectionChangedCompressor, SLOT(start()));
 
         d->shapeChangedAcyclicConnector.connectBackwardVoid(
-            canvas->selectedShapesProxy(), SIGNAL(selectionContentChanged()),
-            this, SLOT(selectionChanged()));
+                    canvas->selectedShapesProxy(), SIGNAL(selectionContentChanged()),
+                    &d->selectionChangedCompressor, SLOT(start()));
+
+        connect(&d->selectionChangedCompressor, SIGNAL(timeout()), this, SLOT(selectionChanged()));
 
         d->resourceManagerAcyclicConnector.connectBackwardResourcePair(
-            canvas->resourceManager(), SIGNAL(canvasResourceChanged(int, const QVariant&)),
-            this, SLOT(canvasResourceChanged(int, const QVariant &)));
+                    canvas->resourceManager(), SIGNAL(canvasResourceChanged(int,QVariant)),
+                    this, SLOT(canvasResourceChanged(int,QVariant)));
 
         d->canvas = canvas;
     }
 
-
     {
 
-       d->fillConfigWidget = new KoFillConfigWidget(canvas, KoFlake::StrokeFill, false, this);
-       d->fillConfigWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
-       d->ui->fillConfigWidgetLayout->addWidget(d->fillConfigWidget);
-       connect(d->fillConfigWidget, SIGNAL(sigFillChanged()), SIGNAL(sigStrokeChanged()));
+        d->fillConfigWidget = new KoFillConfigWidget(canvas, KoFlake::StrokeFill, true, this);
+        d->fillConfigWidget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
+        d->ui->fillConfigWidgetLayout->addWidget(d->fillConfigWidget);
+        connect(d->fillConfigWidget, SIGNAL(sigFillChanged()), SIGNAL(sigStrokeChanged()));
     }
 
     d->ui->thicknessLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     d->ui->thicknessLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     // set min/max/step and value in points, then set actual unit
-    d->ui->lineWidth->setMinMaxStep(0.0, 1000.0, 0.5);
+    d->ui->lineWidth->setMinMaxStep(0.5, 1000.0, 0.5); // if someone wants 0, just set to "none" on UI
     d->ui->lineWidth->setDecimals(2);
     d->ui->lineWidth->setUnit(KoUnit(KoUnit::Point));
     d->ui->lineWidth->setToolTip(i18n("Set line width of actual selection"));
@@ -303,7 +301,7 @@ KoStrokeConfigWidget::KoStrokeConfigWidget(KoCanvasBase *canvas, QWidget * paren
     connect(d->capNJoinMenu->miterLimit, SIGNAL(valueChangedPt(qreal)),    this, SLOT(applyJoinCapChanges()));
 
     { // Map the marker signals correctly
-        QSignalMapper *mapper = new QSignalMapper(this);
+        KisSignalMapper *mapper = new KisSignalMapper(this);
         connect(mapper, SIGNAL(mapped(int)), SLOT(applyMarkerChanges(int)));
 
         connect(d->startMarkerSelector,  SIGNAL(currentIndexChanged(int)), mapper, SLOT(map()));
@@ -323,10 +321,11 @@ KoStrokeConfigWidget::KoStrokeConfigWidget(KoCanvasBase *canvas, QWidget * paren
         }
     }
 
-    selectionChanged();
+    d->selectionChangedCompressor.start();
 
-    d->fillConfigWidget->activate();
-    deactivate();
+    // initialize deactivation locks
+    d->deactivationLocks.push_back(KisAcyclicSignalConnector::Blocker(d->shapeChangedAcyclicConnector));
+    d->deactivationLocks.push_back(KisAcyclicSignalConnector::Blocker(d->resourceManagerAcyclicConnector));
 }
 
 KoStrokeConfigWidget::~KoStrokeConfigWidget()
@@ -339,7 +338,7 @@ void KoStrokeConfigWidget::setNoSelectionTrackingMode(bool value)
     d->fillConfigWidget->setNoSelectionTrackingMode(value);
     d->noSelectionTrackingMode = value;
     if (!d->noSelectionTrackingMode) {
-        selectionChanged();
+        d->selectionChangedCompressor.start();
     }
 }
 
@@ -430,7 +429,7 @@ void KoStrokeConfigWidget::setUnit(const KoUnit &unit, KoShape *representativeSh
      */
     KoUnit newUnit(unit);
     if (representativeShape) {
-        newUnit.adjustByPixelTransform(representativeShape->absoluteTransformation(0));
+        newUnit.adjustByPixelTransform(representativeShape->absoluteTransformation());
     }
 
     d->ui->lineWidth->setUnit(newUnit);
@@ -461,12 +460,12 @@ void KoStrokeConfigWidget::updateMarkers(const QList<KoMarker*> &markers)
 
 void KoStrokeConfigWidget::activate()
 {
-    KIS_SAFE_ASSERT_RECOVER_RETURN(!d->deactivationLocks.empty());
+    KIS_SAFE_ASSERT_RECOVER_NOOP(!d->deactivationLocks.empty());
     d->deactivationLocks.clear();
     d->fillConfigWidget->activate();
 
     if (!d->noSelectionTrackingMode) {
-        selectionChanged();
+        d->selectionChangedCompressor.start();
     } else {
         loadCurrentStrokeFillFromResourceServer();
     }
@@ -474,7 +473,7 @@ void KoStrokeConfigWidget::activate()
 
 void KoStrokeConfigWidget::deactivate()
 {
-    KIS_SAFE_ASSERT_RECOVER_RETURN(d->deactivationLocks.empty());
+    KIS_SAFE_ASSERT_RECOVER_NOOP(d->deactivationLocks.empty());
 
     d->deactivationLocks.push_back(KisAcyclicSignalConnector::Blocker(d->shapeChangedAcyclicConnector));
     d->deactivationLocks.push_back(KisAcyclicSignalConnector::Blocker(d->resourceManagerAcyclicConnector));
@@ -501,8 +500,8 @@ void KoStrokeConfigWidget::setActive(bool active)
 //------------------------
 
 template <typename ModifyFunction>
-    auto applyChangeToStrokes(KoCanvasBase *canvas, ModifyFunction modifyFunction)
-        -> decltype(modifyFunction(KoShapeStrokeSP()), void())
+auto applyChangeToStrokes(KoCanvasBase *canvas, ModifyFunction modifyFunction)
+-> decltype(modifyFunction(KoShapeStrokeSP()), void())
 {
     KoSelection *selection = canvas->selectedShapesProxy()->selection();
 
@@ -520,10 +519,10 @@ template <typename ModifyFunction>
 void KoStrokeConfigWidget::applyDashStyleChanges()
 {
     applyChangeToStrokes(
-        d->canvas,
-        [this] (KoShapeStrokeSP stroke) {
-            stroke->setLineStyle(lineStyle(), lineDashes());
-        });
+                d->canvas,
+                [this] (KoShapeStrokeSP stroke) {
+        stroke->setLineStyle(lineStyle(), lineDashes());
+    });
 
     emit sigStrokeChanged();
 }
@@ -531,10 +530,10 @@ void KoStrokeConfigWidget::applyDashStyleChanges()
 void KoStrokeConfigWidget::applyLineWidthChanges()
 {
     applyChangeToStrokes(
-        d->canvas,
-        [this] (KoShapeStrokeSP stroke) {
-            stroke->setLineWidth(lineWidth());
-        });
+                d->canvas,
+                [this] (KoShapeStrokeSP stroke) {
+        stroke->setLineWidth(lineWidth());
+    });
 
     emit sigStrokeChanged();
 }
@@ -542,13 +541,13 @@ void KoStrokeConfigWidget::applyLineWidthChanges()
 void KoStrokeConfigWidget::applyJoinCapChanges()
 {
     applyChangeToStrokes(
-        d->canvas,
-        [this] (KoShapeStrokeSP stroke) {
+                d->canvas,
+                [this] (KoShapeStrokeSP stroke) {
 
-            stroke->setCapStyle(static_cast<Qt::PenCapStyle>(d->capNJoinMenu->capGroup->checkedId()));
-            stroke->setJoinStyle(static_cast<Qt::PenJoinStyle>(d->capNJoinMenu->joinGroup->checkedId()));
-            stroke->setMiterLimit(miterLimit());
-        });
+        stroke->setCapStyle(static_cast<Qt::PenCapStyle>(d->capNJoinMenu->capGroup->checkedId()));
+        stroke->setJoinStyle(static_cast<Qt::PenJoinStyle>(d->capNJoinMenu->joinGroup->checkedId()));
+        stroke->setMiterLimit(miterLimit());
+    });
 
     emit sigStrokeChanged();
 }
@@ -669,10 +668,10 @@ void KoStrokeConfigWidget::selectionChanged()
 
     // we need to linearize update order, and force the child widget to update
     // before we start doing it
-    d->fillConfigWidget->forceUpdateOnSelectionChanged();
-
 
     QList<KoShape*> shapes = selection->selectedEditableShapes();
+
+    d->fillConfigWidget->forceUpdateOnSelectionChanged(); // calls shapeChanged() logic
 
     KoShape *shape = !shapes.isEmpty() ? shapes.first() : 0;
 
@@ -739,22 +738,22 @@ void KoStrokeConfigWidget::selectionChanged()
         }
     }
 
-    const bool lineOptionsVisible =  d->fillConfigWidget->selectedFillIndex() != 0;
+    const bool lineOptionsVisible = (d->fillConfigWidget->selectedFillIndex() != 0);
 
     // This switch statement is to help the tab widget "pages" to be closer to the correct size
     // if we don't do this the internal widgets get rendered, then the tab page has to get resized to
     // fill up the space, then the internal widgets have to resize yet again...causing flicker
     switch(d->fillConfigWidget->selectedFillIndex()) {
-        case 0: // no fill
-            this->setMinimumHeight(130);
-            break;
-        case 1: // solid fill
-             this->setMinimumHeight(200);
-             break;
-        case 2: // gradient fill
-            this->setMinimumHeight(350);
-        case 3: // pattern fill
-            break;
+    case 0: // no fill
+        this->setMinimumHeight(130);
+        break;
+    case 1: // solid fill
+        this->setMinimumHeight(200);
+        break;
+    case 2: // gradient fill
+        this->setMinimumHeight(350);
+    case 3: // pattern fill
+        break;
     }
 
 
@@ -779,10 +778,10 @@ void KoStrokeConfigWidget::selectionChanged()
 void KoStrokeConfigWidget::canvasResourceChanged(int key, const QVariant &value)
 {
     switch (key) {
-    case KoCanvasResourceManager::Unit:
+    case KoCanvasResourceProvider::Unit:
         // we request the whole selection to reload because the
         // unit of the stroke width depends on the selected shape
-        selectionChanged();
+        d->selectionChangedCompressor.start();
         break;
     case KisCanvasResourceProvider::Size:
         if (d->noSelectionTrackingMode) {

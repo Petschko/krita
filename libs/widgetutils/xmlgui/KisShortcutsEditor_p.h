@@ -29,12 +29,14 @@
 
 #include "KisShortcutsEditor.h"
 #include <QTreeWidget>
+#include <QScroller>
 #include <ktreewidgetsearchline.h>
 
 #include "KisShortcutsDialog_p.h"
 
 // NEEDED FOR KisShortcutsEditorPrivate
 #include "ui_KisShortcutsDialog.h"
+
 
 
 
@@ -76,7 +78,7 @@ public:
     void capturedShortcut(const QVariant &, const QModelIndex &);
 
     /**
-     * Add @p action at hierchy level @p level.
+     * Add @p action at hierarchy level @p level.
      *
      * Filters out QActions (TODO: hmm) and unnamed actions before adding.
      *
@@ -88,6 +90,8 @@ public:
 
     // TODO: Is this necessary w/o global actions?
     void setActionTypes(KisShortcutsEditor::ActionTypes actionTypes);
+
+public:
 
     // Members
     QList<KActionCollection *> actionCollections;

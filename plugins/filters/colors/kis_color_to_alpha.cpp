@@ -23,6 +23,7 @@
 #include <QSpinBox>
 
 #include <KoColorSpaceMaths.h>
+#include <KoConfig.h>
 #include <KoUpdater.h>
 
 #include "kis_progress_update_helper.h"
@@ -46,14 +47,14 @@ KisFilterColorToAlpha::KisFilterColorToAlpha()
     setColorSpaceIndependence(FULLY_INDEPENDENT);
 }
 
-KisConfigWidget * KisFilterColorToAlpha::createConfigurationWidget(QWidget* parent, const KisPaintDeviceSP) const
+KisConfigWidget * KisFilterColorToAlpha::createConfigurationWidget(QWidget* parent, const KisPaintDeviceSP, bool) const
 {
     return new KisWdgColorToAlpha(parent);
 }
 
-KisFilterConfigurationSP KisFilterColorToAlpha::factoryConfiguration() const
+KisFilterConfigurationSP KisFilterColorToAlpha::defaultConfiguration() const
 {
-    KisFilterConfigurationSP config = new KisFilterConfiguration("colortoalpha", 1);
+    KisFilterConfigurationSP config = factoryConfiguration();
     config->setProperty("targetcolor", QColor(255, 255, 255));
     config->setProperty("threshold", 100);
     return config;
@@ -171,7 +172,6 @@ void KisFilterColorToAlpha::processImpl(KisPaintDeviceSP device,
                                         threshold, cs);
         break;
     case KoChannelInfo::FLOAT16:
-#include <KoConfig.h>
 #ifdef HAVE_OPENEXR
 #include <half.h>
         applyToIterator<half, half>(channelIndex.size(), channelIndex.data(),

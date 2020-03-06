@@ -30,6 +30,9 @@
 
 #include "lcms2.h"
 
+#include "kis_assert.h"
+
+
 struct IccColorProfile::Data::Private {
     QByteArray rawData;
 };
@@ -71,6 +74,7 @@ struct IccColorProfile::Private {
         QScopedPointer<IccColorProfile::Data> data;
         QScopedPointer<LcmsColorProfileContainer> lcmsProfile;
         QVector<KoChannelInfo::DoubleRange> uiMinMaxes;
+        bool canCreateCyclicTransform = false;
     };
     QSharedPointer<Shared> shared;
 };
@@ -137,7 +141,7 @@ float IccColorProfile::version() const
 bool IccColorProfile::isSuitableForOutput() const
 {
     if (d->shared->lcmsProfile) {
-        return d->shared->lcmsProfile->isSuitableForOutput();
+        return d->shared->lcmsProfile->isSuitableForOutput() && d->shared->canCreateCyclicTransform;
     }
     return false;
 }
@@ -197,6 +201,12 @@ bool IccColorProfile::hasTRC() const
 {
     if (d->shared->lcmsProfile)
         return d->shared->lcmsProfile->hasTRC();
+    return false;
+}
+bool IccColorProfile::isLinear() const
+{
+    if (d->shared->lcmsProfile)
+        return d->shared->lcmsProfile->isLinear();
     return false;
 }
 QVector <qreal> IccColorProfile::getColorantsXYZ() const
@@ -358,13 +368,27 @@ void IccColorProfile::calculateFloatUIMinMax(void)
                               (COLORSPACE_SH(color_space_mask) | CHANNELS_SH(num_channels) | BYTES_SH(2)),
                               cprofile,
                               (COLORSPACE_SH(color_space_mask) | FLOAT_SH(1) | CHANNELS_SH(num_channels) | BYTES_SH(0)), //NOTE THAT 'BYTES' FIELD IS SET TO ZERO ON DLB because 8 bytes overflows the bitfield
-                              INTENT_PERCEPTUAL, 0);      // does the intent matter in this case?
+                              INTENT_ABSOLUTE_COLORIMETRIC, 0);      // does the intent matter in this case?
+                                                                     // absolute colorimetric gives bigger bounds with cmyk's Chemical Proof
 
     if (trans) {
         cmsDoTransform(trans, in_min_pixel, out_min_pixel, 1);
         cmsDoTransform(trans, in_max_pixel, out_max_pixel, 1);
         cmsDeleteTransform(trans);
     }//else, we'll just default to [0..1] below
+
+    // Some (calibration) proifles may have a weird RGB->XYZ transformation matrix,
+    // which is not invertible. Therefore, such profile cannot be used as
+    // a workspace color profile and we should convert the image to sRGB
+    // right on image loading
+
+    // LCMS doesn't have a separate method for checking if conversion matrix
+    // is invertible, therefore we just try to create a simple transformation,
+    // where the profile is both, input and output. If the transformation
+    // is created successfully, then this profile is probably suitable for
+    // usage as a working color space.
+
+    d->shared->canCreateCyclicTransform = bool(trans);
 
     ret.resize(num_channels);
     for (unsigned int i = 0; i < num_channels; ++i) {

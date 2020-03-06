@@ -37,13 +37,18 @@ MoveSelectionStrokeStrategy::MoveSelectionStrokeStrategy(KisPaintLayerSP paintLa
       m_selection(selection),
       m_updatesFacade(updatesFacade)
 {
-    enableJob(KisSimpleStrokeStrategy::JOB_INIT);
+    /**
+     * Selection might have some update projection jobs pending, so we should ensure
+     * all of them are completed before we start our stroke.
+     */
+    enableJob(KisSimpleStrokeStrategy::JOB_INIT, true, KisStrokeJobData::BARRIER);
     enableJob(KisSimpleStrokeStrategy::JOB_FINISH);
     enableJob(KisSimpleStrokeStrategy::JOB_CANCEL);
 }
 
 MoveSelectionStrokeStrategy::MoveSelectionStrokeStrategy(const MoveSelectionStrokeStrategy &rhs)
-    : KisStrokeStrategyUndoCommandBased(rhs),
+    : QObject(),
+      KisStrokeStrategyUndoCommandBased(rhs),
       m_paintLayer(rhs.m_paintLayer),
       m_selection(rhs.m_selection),
       m_updatesFacade(rhs.m_updatesFacade)
@@ -80,6 +85,8 @@ void MoveSelectionStrokeStrategy::initStrokeCallback()
     m_initialDeviceOffset = QPoint(movedDevice->x(), movedDevice->y());
 
     m_selection->setVisible(false);
+
+    emit sigHandlesRectCalculated(movedDevice->exactBounds());
 }
 
 void MoveSelectionStrokeStrategy::finishStrokeCallback()
@@ -123,7 +130,7 @@ void MoveSelectionStrokeStrategy::cancelStrokeCallback()
     if (indirect) {
         KisPaintDeviceSP t = indirect->temporaryTarget();
         if (t) {
-            QRegion dirtyRegion = t->region();
+            KisRegion dirtyRegion = t->region();
 
             indirect->setTemporaryTarget(0);
 
@@ -135,7 +142,7 @@ void MoveSelectionStrokeStrategy::cancelStrokeCallback()
     KisStrokeStrategyUndoCommandBased::cancelStrokeCallback();
 }
 
-#include "move_stroke_strategy.h"
+#include "tool/strokes/move_stroke_strategy.h"
 
 void MoveSelectionStrokeStrategy::doStrokeCallback(KisStrokeJobData *data)
 {
@@ -147,7 +154,7 @@ void MoveSelectionStrokeStrategy::doStrokeCallback(KisStrokeJobData *data)
 
         KisPaintDeviceSP movedDevice = indirect->temporaryTarget();
 
-        QRegion dirtyRegion = movedDevice->region();
+        QRegion dirtyRegion = movedDevice->region().toQRegion();
 
         QPoint currentDeviceOffset(movedDevice->x(), movedDevice->y());
         QPoint newDeviceOffset(m_initialDeviceOffset + d->offset);
@@ -158,7 +165,7 @@ void MoveSelectionStrokeStrategy::doStrokeCallback(KisStrokeJobData *data)
         movedDevice->setY(newDeviceOffset.y());
         m_finalOffset = d->offset;
 
-        m_paintLayer->setDirty(dirtyRegion);
+        m_paintLayer->setDirty(KisRegion::fromQRegion(dirtyRegion));
     } else {
         KisStrokeStrategyUndoCommandBased::doStrokeCallback(data);
     }

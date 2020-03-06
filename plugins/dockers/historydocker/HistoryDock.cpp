@@ -44,7 +44,6 @@ HistoryDock::HistoryDock()
     m_bnConfigure->setIcon(KisIconUtils::loadIcon("configure"));
     connect(m_bnConfigure, SIGNAL(clicked(bool)), SLOT(configure()));
     hl->addWidget(m_bnConfigure);
-    vl->addItem(hl);
     vl->addLayout(hl);
 
     setWidget(page);
@@ -59,7 +58,7 @@ void HistoryDock::setCanvas(KoCanvasBase *canvas)
             && myCanvas->shapeController()
             && myCanvas->shapeController()->resourceManager()
             && myCanvas->shapeController()->resourceManager()->undoStack()) {
-        KUndo2Stack* undoStack = canvas->shapeController()->resourceManager()->undoStack();
+        KUndo2Stack* undoStack = myCanvas->shapeController()->resourceManager()->undoStack();
 
         m_undoView->setStack(undoStack);
         KisConfig cfg(true);

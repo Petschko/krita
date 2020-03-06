@@ -10,6 +10,7 @@ include_directories(
 
 add_subdirectory(styles)
 add_subdirectory(tests)
+add_subdirectory(resources/tests)
 
 set(kritaflake_SRCS
     KoGradientHelper.cpp
@@ -18,7 +19,7 @@ set(kritaflake_SRCS
     KoResourceManager_p.cpp
     KoDerivedResourceConverter.cpp
     KoResourceUpdateMediator.cpp
-    KoCanvasResourceManager.cpp
+    KoCanvasResourceProvider.cpp
     KoDocumentResourceManager.cpp
     KoCanvasObserverBase.cpp
     KoCanvasSupervisor.cpp
@@ -170,7 +171,6 @@ set(kritaflake_SRCS
     html/HtmlSavingContext.cpp
     html/HtmlWriter.cpp
 
-    tools/KoCreateShapeStrategy.cpp
     tools/KoPathToolFactory.cpp
     tools/KoPathTool.cpp
     tools/KoPathToolSelection.cpp
@@ -188,8 +188,6 @@ set(kritaflake_SRCS
     tools/KoInteractionTool.cpp
     tools/KoInteractionStrategy.cpp
     tools/KoInteractionStrategyFactory.cpp
-    tools/KoCreateShapesTool.cpp
-    tools/KoCreateShapesToolFactory.cpp
     tools/KoShapeRubberSelectStrategy.cpp
     tools/KoPathSegmentChangeStrategy.cpp
 
@@ -217,6 +215,7 @@ set(kritaflake_SRCS
     text/KoSvgTextShapeMarkupConverter.cpp
 
     resources/KoSvgSymbolCollectionResource.cpp
+    resources/KoGamutMask.cpp
 
     FlakeDebug.cpp
     tests/MockShapes.cpp

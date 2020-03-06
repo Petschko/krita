@@ -60,30 +60,29 @@ KisAnimationImporter::KisAnimationImporter(KisDocument* document)
 KisAnimationImporter::~KisAnimationImporter()
 {}
 
-KisImportExportFilter::ConversionStatus KisAnimationImporter::import(QStringList files, int firstFrame, int step)
+KisImportExportErrorCode KisAnimationImporter::import(QStringList files, int firstFrame, int step)
 {
     Q_ASSERT(step > 0);
 
-    m_d->image->lock();
     KisUndoAdapter *undo = m_d->image->undoAdapter();
     undo->beginMacro(kundo2_i18n("Import animation"));
 
     QScopedPointer<KisDocument> importDoc(KisPart::instance()->createDocument());
     importDoc->setFileBatchMode(true);
 
-    KisImportExportFilter::ConversionStatus status = KisImportExportFilter::OK;
+    KisImportExportErrorCode status = ImportExportCodes::OK;
     int frame = firstFrame;
     int filesProcessed = 0;
 
     if (m_d->updater) {
-        m_d->updater->setRange(0, files.size() - 1);
+        m_d->updater->setRange(0, files.size());
     }
 
     KisRasterKeyframeChannel *contentChannel = 0;
     Q_FOREACH(QString file, files) {
         bool successfullyLoaded = importDoc->openUrl(QUrl::fromLocalFile(file), KisDocument::DontAddToRecent);
         if (!successfullyLoaded) {
-            status = KisImportExportFilter::InternalError;
+            status = ImportExportCodes::InternalError;
             break;
         }
 
@@ -100,7 +99,7 @@ KisImportExportFilter::ConversionStatus KisAnimationImporter::import(QStringList
             if (m_d->updater->interrupted()) {
                 m_d->stop = true;
             } else {
-                m_d->updater->setValue(filesProcessed);
+                m_d->updater->setValue(filesProcessed + 1);
 
                 // the updater doesn't call that automatically,
                 // it is "threaded" by default
@@ -109,7 +108,7 @@ KisImportExportFilter::ConversionStatus KisAnimationImporter::import(QStringList
         }
 
         if (m_d->stop) {
-            status = KisImportExportFilter::ProgressCancelled;
+            status = ImportExportCodes::Cancelled;
             break;
         }
 
@@ -119,7 +118,6 @@ KisImportExportFilter::ConversionStatus KisAnimationImporter::import(QStringList
     }
 
     undo->endMacro();
-    m_d->image->unlock();
 
     return status;
 }

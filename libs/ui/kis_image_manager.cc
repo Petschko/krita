@@ -127,11 +127,17 @@ qint32 KisImageManager::importImage(const QUrl &urlArg, const QString &layerType
         urls.push_back(urlArg);
     }
 
-    if (urls.empty())
+    if (urls.empty()) {
         return 0;
+    }
 
-    for (QList<QUrl>::iterator it = urls.begin(); it != urls.end(); ++it) {
-        new KisImportCatcher(*it, m_view, layerType);
+    Q_FOREACH(const QUrl &url, urls) {
+        if (url.toLocalFile().endsWith("svg")) {
+            new KisImportCatcher(url, m_view, "KisShapeLayer");
+        }
+        else {
+            new KisImportCatcher(url, m_view, layerType);
+        }
     }
 
     m_view->canvas()->update();
@@ -172,7 +178,14 @@ void KisImageManager::slotImageProperties()
 
     QPointer<KisDlgImageProperties> dlg = new KisDlgImageProperties(image, m_view->mainWindow());
     if (dlg->exec() == QDialog::Accepted) {
-        image->convertProjectionColorSpace(dlg->colorSpace());
+        if (dlg->convertLayerPixels()) {
+            image->convertImageColorSpace(dlg->colorSpace(),
+                                          KoColorConversionTransformation::internalRenderingIntent(),
+                                          KoColorConversionTransformation::internalConversionFlags());
+
+        } else {
+            image->convertImageProjectionColorSpace(dlg->colorSpace());
+        }
     }
     delete dlg;
 }
@@ -193,7 +206,7 @@ void KisImageManager::slotImageColor()
 
     QColorDialog dlg;
     dlg.setOption(QColorDialog::ShowAlphaChannel, true);
-
+    dlg.setWindowTitle(i18n("Select a Color"));
     KoColor bg = image->defaultProjectionColor();
     dlg.setCurrentColor(bg.toQColor());
 

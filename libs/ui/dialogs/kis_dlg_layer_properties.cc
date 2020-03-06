@@ -103,10 +103,10 @@ KisDlgLayerProperties::KisDlgLayerProperties(KisNodeList nodes, KisViewManager *
     d->nameProperty->connectIgnoreCheckBox(d->page->chkName);
     d->nameProperty->connectAutoEnableWidget(d->page->editName);
     d->nameProperty->connectValueChangedSignal(this, SLOT(slotNameValueChangedInternally()));
-    connect(d->page->editName, SIGNAL(textChanged(const QString &)), SLOT(slotNameValueChangedExternally()));
+    connect(d->page->editName, SIGNAL(textChanged(QString)), SLOT(slotNameValueChangedExternally()));
 
     d->page->intOpacity->setRange(0, 100);
-    d->page->intOpacity->setSuffix("%");
+    d->page->intOpacity->setSuffix(i18n("%"));
     d->opacityProperty.reset(new KisMultinodeOpacityProperty(nodes));
     d->opacityProperty->connectIgnoreCheckBox(d->page->chkOpacity);
     d->opacityProperty->connectAutoEnableWidget(d->page->intOpacity);
@@ -273,14 +273,20 @@ void KisDlgLayerProperties::slotOpacityValueChangedExternally()
 
 void KisDlgLayerProperties::slotNameValueChangedInternally()
 {
-    d->page->editName->setText(d->nameProperty->value());
+    if (d->page->editName->text() != d->nameProperty->value()) {
+        d->page->editName->setText(d->nameProperty->value());
+    }
+
     d->page->editName->setEnabled(!d->nameProperty->isIgnored());
 }
 
 void KisDlgLayerProperties::slotNameValueChangedExternally()
 {
     if (d->nameProperty->isIgnored()) return;
-    d->nameProperty->setValue(d->page->editName->text());
+
+    if (d->page->editName->text() != d->nameProperty->value()) {
+        d->nameProperty->setValue(d->page->editName->text());
+    }
 }
 
 void KisDlgLayerProperties::slotPropertyValueChangedInternally()

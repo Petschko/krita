@@ -75,9 +75,6 @@ void KisEdgeDetectionFilter::processImpl(KisPaintDeviceSP device, const QRect &r
     if (configuration) {
         channelFlags = configuration->channelFlags();
     }
-    if (channelFlags.isEmpty() || !configuration) {
-        channelFlags = device->colorSpace()->channelFlags();
-    }
 
     KisEdgeDetectionKernel::FilterType type = KisEdgeDetectionKernel::SobelVector;
     if (config->getString("type") == "prewitt") {
@@ -110,9 +107,9 @@ void KisEdgeDetectionFilter::processImpl(KisPaintDeviceSP device, const QRect &r
                                                config->getBool("transparency", false));
 }
 
-KisFilterConfigurationSP KisEdgeDetectionFilter::factoryConfiguration() const
+KisFilterConfigurationSP KisEdgeDetectionFilter::defaultConfiguration() const
 {
-    KisFilterConfigurationSP config = new KisFilterConfiguration(id().id(), 1);
+    KisFilterConfigurationSP config = factoryConfiguration();
     config->setProperty("horizRadius", 1);
     config->setProperty("vertRadius", 1);
     config->setProperty("type", "prewitt");
@@ -123,7 +120,7 @@ KisFilterConfigurationSP KisEdgeDetectionFilter::factoryConfiguration() const
     return config;
 }
 
-KisConfigWidget *KisEdgeDetectionFilter::createConfigurationWidget(QWidget *parent, const KisPaintDeviceSP dev) const
+KisConfigWidget *KisEdgeDetectionFilter::createConfigurationWidget(QWidget *parent, const KisPaintDeviceSP dev, bool) const
 {
     Q_UNUSED(dev);
     return new KisWdgEdgeDetection(parent);
@@ -135,7 +132,7 @@ QRect KisEdgeDetectionFilter::neededRect(const QRect &rect, const KisFilterConfi
 
     QVariant value;
     /**
-     * NOTE: integer devision by two is done on purpose,
+     * NOTE: integer division by two is done on purpose,
      *       because the kernel size is always odd
      */
     const int halfWidth = _config->getProperty("horizRadius", value) ? KisEdgeDetectionKernel::kernelSizeFromRadius(t.scale(value.toFloat())) / 2 : 5;

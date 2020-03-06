@@ -113,6 +113,7 @@ void KisSelectionBasedLayer::slotImageSizeChanged()
 void KisSelectionBasedLayer::setImage(KisImageWSP image)
 {
     m_d->paintDevice->setDefaultBounds(KisDefaultBoundsSP(new KisDefaultBounds(image)));
+    m_d->selection->pixelSelection()->setDefaultBounds(KisDefaultBoundsSP(new KisDefaultBounds(image)));
     KisLayer::setImage(image);
 
     connect(image.data(), SIGNAL(sigSizeChanged(QPointF,QPointF)), SLOT(slotImageSizeChanged()));
@@ -155,10 +156,15 @@ KisSelectionSP KisSelectionBasedLayer::fetchComposedInternalSelection(const QRec
 
     if (hasTemporaryTarget()) {
         /**
-         * Cloning a selection with COW
-         * FIXME: check whether it's faster than usual bitBlt'ing
+         * WARNING: we don't try to clone the selection entirely, because
+         *          it might be unsafe for shape selections.
+         *
+         * TODO: make cloning of vector selections safe! See a comment in
+         *       KisShapeSelection::clone().
          */
-        tempSelection = new KisSelection(*tempSelection);
+        tempSelection = new KisSelection();
+
+        KisPainter::copyAreaOptimized(rect.topLeft(), m_d->selection->pixelSelection(), tempSelection->pixelSelection(), rect);
 
         KisPainter gc2(tempSelection->pixelSelection());
         setupTemporaryPainter(&gc2);
@@ -224,6 +230,7 @@ void KisSelectionBasedLayer::setInternalSelection(KisSelectionSP selection)
     if (selection) {
         m_d->selection = new KisSelection(*selection.data());
         m_d->selection->setParentNode(this);
+        m_d->selection->setDefaultBounds(new KisDefaultBounds(image()));
         m_d->selection->updateProjection();
 
         KisPixelSelectionSP pixelSelection = m_d->selection->pixelSelection();
@@ -232,19 +239,18 @@ void KisSelectionBasedLayer::setInternalSelection(KisSelectionSP selection)
             enableAnimation();
         }
 
+        KisImageSP imageSP = image().toStrongRef();
+        KIS_SAFE_ASSERT_RECOVER_RETURN(imageSP);
+
+        if (m_d->selection->pixelSelection()->defaultBounds()->bounds() != imageSP->bounds()) {
+            qWarning() << "WARNING: KisSelectionBasedLayer::setInternalSelection"
+                       << "New selection has suspicious default bounds";
+            qWarning() << "WARNING:" << ppVar(m_d->selection->pixelSelection()->defaultBounds()->bounds());
+            qWarning() << "WARNING:" << ppVar(imageSP->bounds());
+        }
+
     } else {
         m_d->selection = 0;
-    }
-
-    KisImageSP imageSP = image().toStrongRef();
-    if (!imageSP) {
-        return;
-    }
-    if (selection->pixelSelection()->defaultBounds()->bounds() != imageSP->bounds()) {
-        qWarning() << "WARNING: KisSelectionBasedLayer::setInternalSelection"
-                   << "New selection has suspicious default bounds";
-        qWarning() << "WARNING:" << ppVar(selection->pixelSelection()->defaultBounds()->bounds());
-        qWarning() << "WARNING:" << ppVar(imageSP->bounds());
     }
 }
 

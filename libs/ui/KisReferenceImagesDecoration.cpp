@@ -43,6 +43,7 @@ struct KisReferenceImagesDecoration::Private {
     KisWeakSharedPtr<KisReferenceImagesLayer> layer;
     Buffer buffer;
     QTransform previousTransform;
+    QSizeF previousViewSize;
 
     explicit Private(KisReferenceImagesDecoration *q)
         : q(q)
@@ -100,6 +101,7 @@ KisReferenceImagesDecoration::KisReferenceImagesDecoration(QPointer<KisView> par
     , d(new Private(this))
 {
     connect(document->image().data(), SIGNAL(sigNodeAddedAsync(KisNodeSP)), this, SLOT(slotNodeAdded(KisNodeSP)));
+    connect(document, &KisDocument::sigReferenceImagesLayerChanged, this, &KisReferenceImagesDecoration::slotNodeAdded);
 
     auto referenceImageLayer = document->referenceImagesLayer();
     if (referenceImageLayer) {
@@ -122,18 +124,26 @@ bool KisReferenceImagesDecoration::documentHasReferenceImages() const
     return view()->document()->referenceImagesLayer() != nullptr;
 }
 
-void KisReferenceImagesDecoration::drawDecoration(QPainter &gc, const QRectF &updateRect, const KisCoordinatesConverter */*converter*/, KisCanvas2 */*canvas*/)
+void KisReferenceImagesDecoration::drawDecoration(QPainter &gc, const QRectF &/*updateRect*/, const KisCoordinatesConverter *converter, KisCanvas2 */*canvas*/)
 {
+    // TODO: can we use partial updates here?
+
     KisSharedPtr<KisReferenceImagesLayer> layer = d->layer.toStrongRef();
 
     if (!layer.isNull()) {
-        QTransform transform = view()->viewConverter()->imageToWidgetTransform();
-        if (!KisAlgebra2D::fuzzyMatrixCompare(transform, d->previousTransform, 1e-4)) {
+        QSizeF viewSize = view()->size();
+
+        QTransform transform = converter->imageToWidgetTransform();
+        if (d->previousViewSize != viewSize || !KisAlgebra2D::fuzzyMatrixCompare(transform, d->previousTransform, 1e-4)) {
+            d->previousViewSize = viewSize;
             d->previousTransform = transform;
-            d->updateBufferByWidgetCoordinates(QRectF(0, 0, view()->width(), view()->height()));
+            d->buffer.image = QImage();
+            d->updateBufferByWidgetCoordinates(QRectF(QPointF(0,0), viewSize));
         }
 
-        gc.drawImage(d->buffer.position, d->buffer.image);
+        if (!d->buffer.image.isNull()) {
+            gc.drawImage(d->buffer.position, d->buffer.image);
+        }
     }
 }
 
@@ -156,9 +166,15 @@ void KisReferenceImagesDecoration::slotReferenceImagesChanged(const QRectF &dirt
 
 void KisReferenceImagesDecoration::setReferenceImageLayer(KisSharedPtr<KisReferenceImagesLayer> layer)
 {
-    d->layer = layer;
-    connect(
-            layer.data(), SIGNAL(sigUpdateCanvas(const QRectF&)),
-            this, SLOT(slotReferenceImagesChanged(const QRectF&))
-    );
+    if (d->layer.data() != layer.data()) {
+        if (d->layer) {
+            d->layer->disconnect(this);
+        }
+        d->layer = layer;
+        connect(layer.data(), SIGNAL(sigUpdateCanvas(QRectF)),
+                this, SLOT(slotReferenceImagesChanged(QRectF)));
+        if (layer->extent() != QRectF()) { // in case the reference layer is just being loaded from the .kra file
+            slotReferenceImagesChanged(layer->extent());
+        }
+    }
 }

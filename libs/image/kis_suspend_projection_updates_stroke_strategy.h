@@ -19,22 +19,33 @@
 #ifndef __KIS_SUSPEND_PROJECTION_UPDATES_STROKE_STRATEGY_H
 #define __KIS_SUSPEND_PROJECTION_UPDATES_STROKE_STRATEGY_H
 
-#include <kis_simple_stroke_strategy.h>
+#include <KisRunnableBasedStrokeStrategy.h>
 
 #include <QScopedPointer>
 
-class KisSuspendProjectionUpdatesStrokeStrategy : public KisSimpleStrokeStrategy
+class KisSuspendProjectionUpdatesStrokeStrategy : public KisRunnableBasedStrokeStrategy
 {
 public:
-    KisSuspendProjectionUpdatesStrokeStrategy(KisImageWSP image, bool suspend);
+    struct SharedData {
+        KisProjectionUpdatesFilterCookie installedFilterCookie = {};
+    };
+    using SharedDataSP = QSharedPointer<SharedData>;
+
+public:
+    KisSuspendProjectionUpdatesStrokeStrategy(KisImageWSP image, bool suspend, SharedDataSP sharedData);
     ~KisSuspendProjectionUpdatesStrokeStrategy() override;
 
     static QList<KisStrokeJobData*> createSuspendJobsData(KisImageWSP image);
     static QList<KisStrokeJobData*> createResumeJobsData(KisImageWSP image);
-
+    static SharedDataSP createSharedData();
 private:
+    void initStrokeCallback() override;
     void doStrokeCallback(KisStrokeJobData *data) override;
     void cancelStrokeCallback() override;
+
+    void suspendStrokeCallback() override;
+    void resumeStrokeCallback() override;
+
 
     void resumeAndIssueUpdates(bool dropUpdates);
 

@@ -38,11 +38,13 @@
 #include <kis_debug.h>
 #include <kis_cursor.h>
 #include <brushengine/kis_paintop_registry.h>
-#include "kis_figure_painting_tool_helper.h"
-#include "kis_canvas2.h"
+#include <kis_figure_painting_tool_helper.h>
+#include <kis_canvas2.h>
+#include <kis_action_registry.h>
+#include <kis_painting_information_builder.h>
 
-#include "kis_painting_information_builder.h"
 #include "kis_tool_line_helper.h"
+
 
 const KisCoordinatesConverter* getCoordinatesConverter(KoCanvasBase * canvas)
 {
@@ -56,7 +58,9 @@ KisToolLine::KisToolLine(KoCanvasBase * canvas)
       m_showGuideline(true),
       m_strokeIsRunning(false),
       m_infoBuilder(new KisConverterPaintingInformationBuilder(getCoordinatesConverter(canvas))),
-      m_helper(new KisToolLineHelper(m_infoBuilder.data(), kundo2_i18n("Draw Line"))),
+      m_helper(new KisToolLineHelper(m_infoBuilder.data(),
+                                     canvas->resourceManager(),
+                                     kundo2_i18n("Draw Line"))),
       m_strokeUpdateCompressor(500, KisSignalCompressor::POSTPONE),
       m_longStrokeUpdateCompressor(1000, KisSignalCompressor::FIRST_INACTIVE)
 {
@@ -172,17 +176,20 @@ void KisToolLine::paint(QPainter& gc, const KoViewConverter &converter)
 void KisToolLine::beginPrimaryAction(KoPointerEvent *event)
 {
     NodePaintAbility nodeAbility = nodePaintAbility();
-    if (nodeAbility == NONE || !nodeEditable()) {
+    if (nodeAbility == UNPAINTABLE || !nodeEditable()) {
         event->ignore();
         return;
     }
 
     setMode(KisTool::PAINT_MODE);
 
+    const KisToolShape::ShapeAddInfo info =
+        shouldAddShape(currentNode());
+
     // Always show guideline on vector layers
     m_showGuideline = m_chkShowGuideline->isChecked() || nodeAbility != PAINT;
     updatePreviewTimer(m_showGuideline);
-    m_helper->setEnabled(nodeAbility == PAINT);
+    m_helper->setEnabled((nodeAbility == PAINT && !info.shouldAddShape) || info.shouldAddSelectionShape);
     m_helper->setUseSensors(m_chkUseSensors->isChecked());
     m_helper->start(event, canvas()->resourceManager());
 
@@ -197,8 +204,7 @@ void KisToolLine::updateStroke()
 {
     if (!m_strokeIsRunning) return;
 
-    m_helper->repaintLine(canvas()->resourceManager(),
-                          image(),
+    m_helper->repaintLine(image(),
                           currentNode(),
                           image().data());
 }
@@ -260,11 +266,15 @@ void KisToolLine::endStroke()
 {
     NodePaintAbility nodeAbility = nodePaintAbility();
 
-    if (!m_strokeIsRunning || m_startPoint == m_endPoint || nodeAbility == NONE) {
+    if (!m_strokeIsRunning || m_startPoint == m_endPoint || nodeAbility == UNPAINTABLE) {
+        m_helper->clearPoints();
         return;
     }
 
-    if (nodeAbility == PAINT) {
+    const KisToolShape::ShapeAddInfo info =
+        shouldAddShape(currentNode());
+
+    if ((nodeAbility == PAINT && !info.shouldAddShape) || info.shouldAddSelectionShape) {
         updateStroke();
         m_helper->end();
     }
@@ -358,5 +368,3 @@ QString KisToolLine::quickHelp() const
 {
     return i18n("Alt+Drag will move the origin of the currently displayed line around, Shift+Drag will force you to draw straight lines");
 }
-
-

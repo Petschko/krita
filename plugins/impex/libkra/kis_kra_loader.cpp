@@ -36,6 +36,7 @@
 #include <KisImportExportManager.h>
 #include <KoXmlReader.h>
 #include <KoStoreDevice.h>
+#include <KoResourceServerProvider.h>
 
 #include <filter/kis_filter.h>
 #include <filter/kis_filter_registry.h>
@@ -70,6 +71,7 @@
 #include <kis_filter_configuration.h>
 #include "KisReferenceImagesLayer.h"
 #include "KisReferenceImage.h"
+#include <KoColorSet.h>
 
 #include "KisDocument.h"
 #include "kis_config.h"
@@ -85,6 +87,7 @@
 #include "KisProofingConfiguration.h"
 #include "kis_layer_properties_icons.h"
 #include "kis_node_view_color_scheme.h"
+#include "KisMirrorAxisConfig.h"
 
 /*
 
@@ -136,6 +139,7 @@ public:
     QMap<QString, QString> assistantsFilenames;
     QList<KisPaintingAssistantSP> assistants;
     QMap<KisNode*, QString> keyframeFilenames;
+    QVector<QString> paletteFilenames;
     QStringList errorMessages;
     QStringList warningMessages;
 };
@@ -197,7 +201,6 @@ KisImageSP KisKraLoader::loadXML(const KoXmlElement& element)
 {
     QString attr;
     KisImageSP image = 0;
-    QString name;
     qint32 width;
     qint32 height;
     QString profileProductName;
@@ -294,10 +297,10 @@ KisImageSP KisKraLoader::loadXML(const KoXmlElement& element)
         }
 
         if (m_d->document) {
-            image = new KisImage(m_d->document->createUndoStore(), width, height, cs, name);
+            image = new KisImage(m_d->document->createUndoStore(), width, height, cs, m_d->imageName);
         }
         else {
-            image = new KisImage(0, width, height, cs, name);
+            image = new KisImage(0, width, height, cs, m_d->imageName);
         }
         image->setResolution(xres, yres);
         loadNodes(element, image, const_cast<KisGroupLayer*>(image->rootLayer().data()));
@@ -353,12 +356,29 @@ KisImageSP KisKraLoader::loadXML(const KoXmlElement& element)
             loadGrid(e);
         } else if (e.tagName() == "guides") {
             loadGuides(e);
+        } else if (e.tagName() == MIRROR_AXIS) {
+            loadMirrorAxis(e);
         } else if (e.tagName() == "assistants") {
             loadAssistantsList(e);
         } else if (e.tagName() == "audio") {
             loadAudio(e, image);
         }
     }
+
+    // reading palettes from XML
+    for (child = element.lastChild(); !child.isNull(); child = child.previousSibling()) {
+        QDomElement e = child.toElement();
+        if (e.tagName() == PALETTES) {
+            for (QDomElement paletteElement = e.lastChildElement();
+                 !paletteElement.isNull();
+                 paletteElement = paletteElement.previousSiblingElement()) {
+                QString paletteName = paletteElement.attribute("filename");
+                m_d->paletteFilenames.append(paletteName);
+            }
+            break;
+        }
+    }
+
 
     return image;
 }
@@ -376,13 +396,15 @@ void KisKraLoader::loadBinaryData(KoStore * store, KisImageSP image, const QStri
             if (res) {
                 const KoColorProfile *profile = KoColorSpaceRegistry::instance()->createColorProfile(image->colorSpace()->colorModelId().id(), image->colorSpace()->colorDepthId().id(), data);
                 if (profile && profile->valid()) {
-                    res = image->assignImageProfile(profile);
+                    res = image->assignImageProfile(profile, true);
+                    image->waitForDone();
                 }
                 if (!res) {
                     const QString defaultProfileId = KoColorSpaceRegistry::instance()->defaultProfileForColorSpace(image->colorSpace()->id());
                     profile = KoColorSpaceRegistry::instance()->profileByName(defaultProfileId);
                     Q_ASSERT(profile && profile->valid());
-                    image->assignImageProfile(profile);
+                    image->assignImageProfile(profile, true);
+                    image->waitForDone();
                 }
             }
         }
@@ -486,6 +508,22 @@ void KisKraLoader::loadBinaryData(KoStore * store, KisImageSP image, const QStri
     loadAssistants(store, uri, external);
 }
 
+void KisKraLoader::loadPalettes(KoStore *store, KisDocument *doc)
+{
+    QList<KoColorSet*> list;
+    Q_FOREACH (const QString &filename, m_d->paletteFilenames) {
+        KoColorSet *newPalette = new KoColorSet(filename);
+        store->open(m_d->imageName + PALETTE_PATH + filename);
+        QByteArray data = store->read(store->size());
+        newPalette->fromByteArray(data);
+        newPalette->setIsGlobal(false);
+        newPalette->setIsEditable(true);
+        store->close();
+        list.append(newPalette);
+    }
+    doc->setPaletteList(list);
+}
+
 vKisNodeSP KisKraLoader::selectedNodes() const
 {
     return m_d->selectedNodes;
@@ -504,6 +542,11 @@ QStringList KisKraLoader::errorMessages() const
 QStringList KisKraLoader::warningMessages() const
 {
     return m_d->warningMessages;
+}
+
+QString KisKraLoader::imageName() const
+{
+    return m_d->imageName;
 }
 
 
@@ -744,7 +787,10 @@ KisNodeSP KisKraLoader::loadNode(const KoXmlElement& element, KisImageSP image)
     node->setUseInTimeline(timelineEnabled);
 
     if (node->inherits("KisPaintLayer")) {
-        KisPaintLayer* layer            = qobject_cast<KisPaintLayer*>(node.data());
+        KisPaintLayer* layer = qobject_cast<KisPaintLayer*>(node.data());
+        QBitArray channelLockFlags = stringToFlags(element.attribute(CHANNEL_LOCK_FLAGS, ""), colorSpace->channelCount());
+        layer->setChannelLockFlags(channelLockFlags);
+
         bool onionEnabled = element.attribute(ONION_SKIN_ENABLED, "0") == "0" ? false : true;
         layer->setOnionSkinEnabled(onionEnabled);
     }
@@ -889,7 +935,7 @@ KisNodeSP KisKraLoader::loadAdjustmentLayer(const KoXmlElement& element, KisImag
         return 0; // XXX: We don't have this filter. We should warn about it!
     }
 
-    KisFilterConfigurationSP  kfc = f->defaultConfiguration();
+    KisFilterConfigurationSP  kfc = f->factoryConfiguration();
     kfc->setProperty("legacy", legacy);
     if (legacy=="brightnesscontrast") {
         kfc->setProperty("colorModel", cs->colorModelId().id());
@@ -946,7 +992,7 @@ KisNodeSP KisKraLoader::loadGeneratorLayer(const KoXmlElement& element, KisImage
         return 0; // XXX: We don't have this generator. We should warn about it!
     }
 
-    KisFilterConfigurationSP  kgc = generator->defaultConfiguration();
+    KisFilterConfigurationSP  kgc = generator->factoryConfiguration();
 
     // We'll load the configuration and the selection later.
     layer = new KisGeneratorLayer(image, name, kgc, 0);
@@ -1007,7 +1053,7 @@ KisNodeSP KisKraLoader::loadFilterMask(const KoXmlElement& element)
         return 0; // XXX: We don't have this filter. We should warn about it!
     }
 
-    KisFilterConfigurationSP  kfc = f->defaultConfiguration();
+    KisFilterConfigurationSP  kfc = f->factoryConfiguration();
 
     // We'll load the configuration and the selection later.
     mask = new KisFilterMask();
@@ -1141,6 +1187,17 @@ void KisKraLoader::loadGuides(const KoXmlElement& elem)
     KisGuidesConfig guides;
     guides.loadFromXml(domElement);
     m_d->document->setGuidesConfig(guides);
+}
+
+void KisKraLoader::loadMirrorAxis(const KoXmlElement &elem)
+{
+    QDomDocument dom;
+    KoXml::asQDomElement(dom, elem);
+    QDomElement domElement = dom.firstChildElement();
+
+    KisMirrorAxisConfig mirrorAxis;
+    mirrorAxis.loadFromXml(domElement);
+    m_d->document->setMirrorAxisConfig(mirrorAxis);
 }
 
 void KisKraLoader::loadAudio(const KoXmlElement& elem, KisImageSP image)

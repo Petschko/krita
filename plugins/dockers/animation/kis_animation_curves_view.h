@@ -21,6 +21,7 @@
 
 #include <QScopedPointer>
 #include <QTableView>
+#include <KisKineticScroller.h>
 
 class KisAction;
 class KisZoomButton;
@@ -65,6 +66,8 @@ public Q_SLOTS:
 
     void zoomToFit();
 
+    void slotScrollerStateChanged(QScroller::State state){KisKineticScroller::updateCursor(this, state);}
+
 protected Q_SLOTS:
     void updateGeometries() override;
 
@@ -82,6 +85,7 @@ private:
     struct Private;
     const QScopedPointer<Private> m_d;
 
+    void paintFrames(QPainter &painter);
     void paintCurves(QPainter &painter, int firstFrame, int lastFrame);
     void paintCurve(int channel, int firstFrame, int lastFrame, QPainter &painter);
     void paintCurveSegment(QPainter &painter, QPointF pos1, QPointF rightTangent, QPointF leftTangent, QPointF pos2);
@@ -90,6 +94,8 @@ private:
 
     void findExtremes(qreal *minimum, qreal *maximum);
     void updateVerticalRange();
+
+
 
     void startPan(QPoint mousePos);
 };

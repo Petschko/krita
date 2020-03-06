@@ -55,6 +55,7 @@ TimelineRulerHeader::TimelineRulerHeader(QWidget *parent)
 {
     setSectionResizeMode(QHeaderView::Fixed);
     setDefaultSectionSize(18);
+    setMinimumSectionSize(8);
 }
 
 TimelineRulerHeader::~TimelineRulerHeader()
@@ -165,6 +166,7 @@ void TimelineRulerHeader::paintEvent(QPaintEvent *e)
     int logical;
     const int width = viewport()->width();
     const int height = viewport()->height();
+
     for (int i = start; i <= end; ++i) {
         // DK: cannot copy-paste easily...
         // if (d->isVisualIndexHidden(i))
@@ -286,7 +288,8 @@ int TimelineRulerHeader::Private::calcSpanWidth(const int sectionWidth) {
 }
 
 void TimelineRulerHeader::paintSection1(QPainter *painter, const QRect &rect, int logicalIndex) const
-{
+{   
+
     if (!rect.isValid())
         return;
 
@@ -429,6 +432,16 @@ void TimelineRulerHeader::mousePressEvent(QMouseEvent *e)
                 model()->setHeaderData(logical, orientation(), true, KisTimeBasedItemModel::ActiveFrameRole);
             }
 
+            /* Fix for safe-assert involving kis_animation_curve_docker.
+             * There should probably be a more elagant way for dealing
+             * with reused timeline_ruler_header instances in other
+             * timeline views instead of simply animation_frame_view.
+             *
+             * This works for now though... */
+            if(!m_d->actionMan){
+                return;
+            }
+
             QMenu menu;
             KisActionManager::safePopulateMenu(&menu, "cut_columns_to_clipboard", m_d->actionMan);
             KisActionManager::safePopulateMenu(&menu, "copy_columns_to_clipboard", m_d->actionMan);
@@ -467,7 +480,7 @@ void TimelineRulerHeader::mousePressEvent(QMouseEvent *e)
 
             return;
 
-        } else if (e->button() == Qt::LeftButton) {
+        } else if (e->button() == Qt::LeftButton) {           
             m_d->lastPressSectionIndex = logical;
             model()->setHeaderData(logical, orientation(), true, KisTimeBasedItemModel::ActiveFrameRole);
         }
@@ -480,7 +493,9 @@ void TimelineRulerHeader::mouseMoveEvent(QMouseEvent *e)
 {
     int logical = logicalIndexAt(e->pos());
     if (logical != -1) {
+
         if (e->buttons() & Qt::LeftButton) {
+
             m_d->model->setScrubState(true);
             model()->setHeaderData(logical, orientation(), true, KisTimeBasedItemModel::ActiveFrameRole);
 
@@ -498,6 +513,7 @@ void TimelineRulerHeader::mouseMoveEvent(QMouseEvent *e)
             }
 
         }
+
     }
 
     QHeaderView::mouseMoveEvent(e);

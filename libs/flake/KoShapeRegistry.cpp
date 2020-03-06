@@ -401,7 +401,7 @@ KoShape * KoShapeRegistry::createShapeFromOdf(const KoXmlElement & e, KoShapeLoa
                             const bool parsed = xmlDoc.setContent(file->contents, &errormessage, &line, &col);
                             if (!parsed) continue;
 
-                            const QRectF bounds = context.documentResourceManager()->shapeController()->documentRectInPixels();
+                            const QRectF bounds = context.documentResourceManager()->documentRectInPixels();
 
                             // WARNING: Krita 3.x expects all the embedded objects to
                             //          be loaded in default resolution of 72.0 ppi.
@@ -433,7 +433,7 @@ KoShape * KoShapeRegistry::createShapeFromOdf(const KoXmlElement & e, KoShapeLoa
                                 // NOTE: here we are expected to stretch the internal to the bounds of
                                 //       the frame! Sounds weird, but it is what Krita 3.x did.
 
-                                const QRectF shapeRect = shape->absoluteOutlineRect(0);
+                                const QRectF shapeRect = shape->absoluteOutlineRect();
                                 const QPointF offset = shapeRect.topLeft();
                                 const QSizeF fragmentSize = shapeRect.size();
 

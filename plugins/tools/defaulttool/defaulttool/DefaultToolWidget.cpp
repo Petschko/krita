@@ -25,7 +25,7 @@
 
 #include <KoInteractionTool.h>
 #include <KoCanvasBase.h>
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 #include <KoShapeManager.h>
 #include <KoSelection.h>
 #include <KoUnit.h>
@@ -211,7 +211,7 @@ void DefaultToolWidget::sizeHasChanged()
             shape->update();
             QSizeF oldSize = shape->size();
             oldState << shape->transformation();
-            QTransform shapeMatrix = shape->absoluteTransformation(0);
+            QTransform shapeMatrix = shape->absoluteTransformation();
 
             // calculate the matrix we would apply to the local shape matrix
             // that tells us the effective scale values we have to use for the resizing
@@ -260,7 +260,7 @@ void DefaultToolWidget::setUnit(const KoUnit &unit)
 
 void DefaultToolWidget::resourceChanged(int key, const QVariant &res)
 {
-    if (key == KoCanvasResourceManager::Unit) {
+    if (key == KoCanvasResourceProvider::Unit) {
         setUnit(res.value<KoUnit>());
     } else if (key == DefaultTool::HotPosition) {
         if (res.toInt() != positionSelector->position()) {

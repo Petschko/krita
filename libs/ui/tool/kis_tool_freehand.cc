@@ -28,6 +28,7 @@
 #include <QThreadPool>
 #include <QApplication>
 #include <QDesktopWidget>
+#include <QScreen>
 
 #include <Eigen/Core>
 
@@ -75,7 +76,7 @@ KisToolFreehand::KisToolFreehand(KoCanvasBase * canvas, const QCursor & cursor, 
     setMaskSyntheticEvents(KisConfig(true).disableTouchOnCanvas()); // Disallow mouse events from finger presses unless enabled
 
     m_infoBuilder = new KisToolFreehandPaintingInformationBuilder(this);
-    m_helper = new KisToolFreehandHelper(m_infoBuilder, transactionText);
+    m_helper = new KisToolFreehandHelper(m_infoBuilder, canvas->resourceManager(), transactionText);
 
     connect(m_helper, SIGNAL(requestExplicitUpdateOutline()), SLOT(explicitUpdateOutline()));
 }
@@ -168,7 +169,6 @@ void KisToolFreehand::initStroke(KoPointerEvent *event)
 {
     m_helper->initPaint(event,
                         convertToPixelCoord(event),
-                        canvas()->resourceManager(),
                         image(),
                         currentNode(),
                         image().data());
@@ -176,18 +176,14 @@ void KisToolFreehand::initStroke(KoPointerEvent *event)
 
 void KisToolFreehand::doStroke(KoPointerEvent *event)
 {
-    //set canvas information here?//
-    KisCanvas2 *canvas2 = dynamic_cast<KisCanvas2 *>(canvas());
-    if (canvas2) {
-        m_helper->setCanvasHorizontalMirrorState(canvas2->xAxisMirrored());
-        m_helper->setCanvasRotation(canvas2->rotationAngle());
-    }
     m_helper->paintEvent(event);
 }
 
 void KisToolFreehand::endStroke()
 {
     m_helper->endPaint();
+    bool paintOpIgnoredEvent = currentPaintOpPreset()->settings()->mouseReleaseEvent();
+    Q_UNUSED(paintOpIgnoredEvent);
 }
 
 bool KisToolFreehand::primaryActionSupportsHiResEvents() const
@@ -214,6 +210,8 @@ void KisToolFreehand::beginPrimaryAction(KoPointerEvent *event)
 
         return;
     }
+
+    KIS_SAFE_ASSERT_RECOVER_RETURN(!m_helper->isRunning());
 
     setMode(KisTool::PAINT_MODE);
 
@@ -267,7 +265,7 @@ bool KisToolFreehand::tryPickByPaintOp(KoPointerEvent *event, AlternateAction ac
      */
     QPointF pos = adjustPosition(event->point, event->point);
     qreal perspective = 1.0;
-    Q_FOREACH (const QPointer<KisAbstractPerspectiveGrid> grid, static_cast<KisCanvas2*>(canvas())->viewManager()->resourceProvider()->perspectiveGrids()) {
+    Q_FOREACH (const QPointer<KisAbstractPerspectiveGrid> grid, static_cast<KisCanvas2*>(canvas())->viewManager()->canvasResourceProvider()->perspectiveGrids()) {
         if (grid && grid->contains(pos)) {
             perspective = grid->distance(pos);
             break;
@@ -285,6 +283,8 @@ bool KisToolFreehand::tryPickByPaintOp(KoPointerEvent *event, AlternateAction ac
                                             perspective, 0, 0),
                         event->modifiers(),
                         currentNode());
+    // DuplicateOP during the picking of new source point (origin)
+    // is the only paintop that returns "false" here
     return !paintOpIgnoredEvent;
 }
 
@@ -345,7 +345,7 @@ void KisToolFreehand::continueAlternateAction(KoPointerEvent *event, AlternateAc
     QPointF offset = actualWidgetPosition - lastWidgetPosition;
 
     KisCanvas2 *canvas2 = dynamic_cast<KisCanvas2 *>(canvas());
-    QRect screenRect = QApplication::desktop()->screenGeometry();
+    QRect screenRect = QGuiApplication::primaryScreen()->availableVirtualGeometry();
 
     qreal scaleX = 0;
     qreal scaleY = 0;
@@ -426,7 +426,7 @@ QPointF KisToolFreehand::adjustPosition(const QPointF& point, const QPointF& str
 qreal KisToolFreehand::calculatePerspective(const QPointF &documentPoint)
 {
     qreal perspective = 1.0;
-    Q_FOREACH (const QPointer<KisAbstractPerspectiveGrid> grid, static_cast<KisCanvas2*>(canvas())->viewManager()->resourceProvider()->perspectiveGrids()) {
+    Q_FOREACH (const QPointer<KisAbstractPerspectiveGrid> grid, static_cast<KisCanvas2*>(canvas())->viewManager()->canvasResourceProvider()->perspectiveGrids()) {
         if (grid && grid->contains(documentPoint)) {
             perspective = grid->distance(documentPoint);
             break;
@@ -444,10 +444,8 @@ QPainterPath KisToolFreehand::getOutlinePath(const QPointF &documentPos,
                                              const KoPointerEvent *event,
                                              KisPaintOpSettings::OutlineMode outlineMode)
 {
-    QPointF imagePos = convertToPixelCoord(documentPos);
-
     if (currentPaintOpPreset())
-        return m_helper->paintOpOutline(imagePos,
+        return m_helper->paintOpOutline(convertToPixelCoord(documentPos),
                                         event,
                                         currentPaintOpPreset()->settings(),
                                         outlineMode);

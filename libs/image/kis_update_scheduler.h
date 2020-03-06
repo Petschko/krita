@@ -142,6 +142,8 @@ public:
     void fullRefresh(KisNodeSP root, const QRect& rc, const QRect &cropRect);
     void addSpontaneousJob(KisSpontaneousJob *spontaneousJob);
 
+    bool hasUpdatesRunning() const;
+
     KisStrokeId startStroke(KisStrokeStrategy *strokeStrategy) override;
     void addJob(KisStrokeId id, KisStrokeJobData *data) override;
     void endStroke(KisStrokeId id) override;
@@ -171,16 +173,11 @@ public:
     void setLod0ToNStrokeStrategyFactory(const KisLodSyncStrokeStrategyFactory &factory);
 
     /**
-     * Install a factory of a stroke strategy, that will be started
-     * every time when the scheduler needs to postpone all the updates
+     * Install a factory of a stroke strategies, that will be started
+     * every time when the scheduler needs to postpone/resume all the updates
      * of the *LOD0* strokes.
      */
-    void setSuspendUpdatesStrokeStrategyFactory(const KisSuspendResumeStrategyFactory &factory);
-
-    /**
-     * \see setSuspendUpdatesStrokeStrategyFactory()
-     */
-    void setResumeUpdatesStrokeStrategyFactory(const KisSuspendResumeStrategyFactory &factory);
+    void setSuspendResumeUpdatesStrokeStrategyFactory(const KisSuspendResumeStrategyPairFactory &factory);
 
     KisPostExecutionUndoAdapter* lodNPostExecutionUndoAdapter() const;
 
@@ -204,6 +201,10 @@ public:
     bool wrapAroundModeSupported() const;
     int currentLevelOfDetail() const;
 
+    void continueUpdate(const QRect &rect);
+    void doSomeUsefulWork();
+    void spareThreadAppeared();
+
 protected:
     // Trivial constructor for testing support
     KisUpdateScheduler();
@@ -215,11 +216,6 @@ protected Q_SLOTS:
      * Called when it is necessary to reread configuration
      */
     void updateSettings();
-
-private Q_SLOTS:
-    void continueUpdate(const QRect &rect);
-    void doSomeUsefulWork();
-    void spareThreadAppeared();
 
 private:
     friend class UpdatesBlockTester;
@@ -235,8 +231,8 @@ protected:
 };
 
 
-class KisTestableUpdaterContext;
 class KisTestableSimpleUpdateQueue;
+class KisUpdaterContext;
 
 class KRITAIMAGE_EXPORT KisTestableUpdateScheduler : public KisUpdateScheduler
 {
@@ -244,7 +240,7 @@ public:
     KisTestableUpdateScheduler(KisProjectionUpdateListener *projectionUpdateListener,
                                qint32 threadCount);
 
-    KisTestableUpdaterContext* updaterContext();
+    KisUpdaterContext* updaterContext();
     KisTestableSimpleUpdateQueue* updateQueue();
     using KisUpdateScheduler::processQueues;
 };

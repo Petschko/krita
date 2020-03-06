@@ -27,6 +27,7 @@
 #include "kis_onion_skin_compositor.h"
 #include "kis_default_bounds.h"
 #include "kis_image.h"
+#include "KoColorSpace.h"
 
 #include "kis_raster_keyframe_channel.h"
 
@@ -86,13 +87,19 @@ KisPaintDeviceSP KisOnionSkinCache::projection(KisPaintDeviceSP source)
         readLocker.unlock();
         QWriteLocker writeLocker(&m_d->lock);
         cachedProjection = m_d->cachedProjection;
-        if (!cachedProjection || !m_d->checkCacheValid(source, compositor)) {
+        if (!cachedProjection ||
+            !m_d->checkCacheValid(source, compositor) ||
+            *cachedProjection->colorSpace() != *source->colorSpace()) {
 
             if (!cachedProjection) {
                 cachedProjection = new KisPaintDevice(source->colorSpace());
             } else {
                 cachedProjection->setDefaultBounds(new KisDefaultBounds());
                 cachedProjection->clear();
+
+                if (*cachedProjection->colorSpace() != *source->colorSpace()) {
+                    cachedProjection->convertTo(source->colorSpace());
+                }
             }
 
             const QRect extent = compositor->calculateExtent(source);
@@ -107,9 +114,9 @@ KisPaintDeviceSP KisOnionSkinCache::projection(KisPaintDeviceSP source)
              */
             const int lod = source->defaultBounds()->currentLevelOfDetail();
             if (lod > 0) {
-                KisPaintDevice::LodDataStruct *data = cachedProjection->createLodDataStruct(lod);
-                cachedProjection->updateLodDataStruct(data, extent);
-                cachedProjection->uploadLodDataStruct(data);
+                QScopedPointer<KisPaintDevice::LodDataStruct> data(cachedProjection->createLodDataStruct(lod));
+                cachedProjection->updateLodDataStruct(data.data(), extent);
+                cachedProjection->uploadLodDataStruct(data.data());
             }
 
             m_d->updateCacheMetrics(source, compositor);

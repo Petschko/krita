@@ -90,6 +90,10 @@ public:
         return m_scratchPad->imageBounds();
     }
 
+    void * sourceCookie() const override {
+        return m_scratchPad;
+    }
+
 private:
     Q_DISABLE_COPY(KisScratchPadDefaultBounds)
 
@@ -128,13 +132,12 @@ KisScratchPad::KisScratchPad(QWidget *parent)
     m_eventFilter = new KisScratchPadEventFilter(this);
 
     m_infoBuilder = new KisPaintingInformationBuilder();
-    m_helper = new KisToolFreehandHelper(m_infoBuilder);
 
     m_scaleBorderWidth = 1;
 }
 
-KisScratchPad::~KisScratchPad() {
-    delete m_helper;
+KisScratchPad::~KisScratchPad()
+{
     delete m_infoBuilder;
 
     delete m_undoAdapter;
@@ -211,10 +214,8 @@ void KisScratchPad::pointerMove(KoPointerEvent *event)
 
 void KisScratchPad::beginStroke(KoPointerEvent *event)
 {
-    KoCanvasResourceManager *resourceManager = m_resourceProvider->resourceManager();
     m_helper->initPaint(event,
                         documentToWidget().map(event->point),
-                        resourceManager,
                         0,
                         0,
                         m_updateScheduler,
@@ -356,8 +357,10 @@ void KisScratchPad::setupScratchPad(KisCanvasResourceProvider* resourceProvider,
 
     connect(m_resourceProvider, SIGNAL(sigOnScreenResolutionChanged(qreal,qreal)),
             SLOT(setOnScreenResolution(qreal,qreal)));
-    connect(this, SIGNAL(colorSelected(const KoColor&)),
-            m_resourceProvider, SLOT(slotSetFGColor(const KoColor&)));
+    connect(this, SIGNAL(colorSelected(KoColor)),
+            m_resourceProvider, SLOT(slotSetFGColor(KoColor)));
+
+    m_helper.reset(new KisToolFreehandHelper(m_infoBuilder, m_resourceProvider->resourceManager()));
 
     m_defaultColor = KoColor(defaultColor, KoColorSpaceRegistry::instance()->rgb8());
 

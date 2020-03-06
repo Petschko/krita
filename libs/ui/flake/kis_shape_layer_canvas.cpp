@@ -42,10 +42,8 @@
 #include <QApplication>
 
 #include <kis_spontaneous_job.h>
-#include "kis_image.h"
 #include "kis_global.h"
-
-//#define DEBUG_REPAINT
+#include "krita_utils.h"
 
 KisShapeLayerCanvasBase::KisShapeLayerCanvasBase(KisShapeLayer *parent, KisImageWSP image)
     : KoCanvasBase(0)
@@ -128,7 +126,7 @@ KisShapeLayerCanvas::KisShapeLayerCanvas(KisShapeLayer *parent, KisImageWSP imag
         , m_projection(0)
         , m_parentLayer(parent)
         , m_asyncUpdateSignalCompressor(100, KisSignalCompressor::FIRST_INACTIVE)
-        , m_image(image)
+        , m_safeForcedConnection(std::bind(&KisShapeLayerCanvas::slotStartAsyncRepaint, this))
 {
     /**
      * The layour should also add itself to its own shape manager, so that the canvas
@@ -137,11 +135,9 @@ KisShapeLayerCanvas::KisShapeLayerCanvas(KisShapeLayer *parent, KisImageWSP imag
     m_shapeManager->addShape(parent, KoShapeManager::AddWithoutRepaint);
     m_shapeManager->selection()->setActiveLayer(parent);
 
-    connect(this, SIGNAL(forwardRepaint()), SLOT(repaint()), Qt::QueuedConnection);
     connect(&m_asyncUpdateSignalCompressor, SIGNAL(timeout()), SLOT(slotStartAsyncRepaint()));
 
-    connect(m_image, SIGNAL(sigSizeChanged(const QPointF &, const QPointF &)), SLOT(slotImageSizeChanged()));
-    m_cachedImageRect = m_image->bounds();
+    setImage(image);
 }
 
 KisShapeLayerCanvas::~KisShapeLayerCanvas()
@@ -151,14 +147,18 @@ KisShapeLayerCanvas::~KisShapeLayerCanvas()
 
 void KisShapeLayerCanvas::setImage(KisImageWSP image)
 {
+    if (m_image) {
+        disconnect(m_image, 0, this, 0);
+    }
+
     m_viewConverter->setImage(image);
+    m_image = image;
+
+    if (image) {
+        connect(m_image, SIGNAL(sigSizeChanged(QPointF,QPointF)), SLOT(slotImageSizeChanged()));
+        m_cachedImageRect = m_image->bounds();
+    }
 }
-
-
-#ifdef DEBUG_REPAINT
-# include <stdlib.h>
-#endif
-
 
 class KisRepaintShapeLayerLayerJob : public KisSpontaneousJob
 {
@@ -182,6 +182,13 @@ public:
 
     int levelOfDetail() const override {
         return 0;
+    }
+
+    QString debugName() const override {
+        QString result;
+        QDebug dbg(&result);
+        dbg << "KisRepaintShapeLayerLayerJob" << m_layer;
+        return result;
     }
 
 private:
@@ -209,30 +216,8 @@ void KisShapeLayerCanvas::updateCanvas(const QVector<QRectF> &region)
         }
     }
 
-    /**
-     * HACK ALERT!
-     *
-     * The shapes may be accessed from both, GUI and worker threads! And we have no real
-     * guard against this until the vector tools will be ported to the strokes framework.
-     *
-     * Here we just avoid the most obvious conflict of threads:
-     *
-     * 1) If the layer if modified by a non-gui (worker) thread, use a spontaneous jobs
-     *    to rerender the canvas. The job will be executed (almost) exclusively and it is
-     *    the responsibility of the worker thread to add a barrier to wait until this job is
-     *    completed, and not try to access the shapes concurrently.
-     *
-     * 2) If the layer is modified by a gui thread, it means that we are being accessed by
-     *    a legacy vector tool. It this case just emit a queued signal to make sure the updates
-     *    are compressed a little bit (TODO: add a compressor?)
-     */
-
-    if (qApp->thread() == QThread::currentThread()) {
-        emit forwardRepaint();
-    } else {
-        m_asyncUpdateSignalCompressor.start();
-        m_hasUpdateInCompressor = true;
-    }
+    m_asyncUpdateSignalCompressor.start();
+    m_hasUpdateInCompressor = true;
 }
 
 
@@ -243,6 +228,86 @@ void KisShapeLayerCanvas::updateCanvas(const QRectF& rc)
 
 void KisShapeLayerCanvas::slotStartAsyncRepaint()
 {
+    QRect repaintRect;
+    bool forceUpdateHiddenAreasOnly = false;
+    const qint32 MASK_IMAGE_WIDTH = 256;
+    const qint32 MASK_IMAGE_HEIGHT = 256;
+    {
+        QMutexLocker locker(&m_dirtyRegionMutex);
+
+        repaintRect = m_dirtyRegion.boundingRect();
+        forceUpdateHiddenAreasOnly = m_forceUpdateHiddenAreasOnly;
+
+        /// Since we are going to override the previous jobs, we should fetch
+        /// all the area covered by it. Otherwise we'll get dirty leftovers of
+        /// the layer on the projection
+        Q_FOREACH (const KoShapeManager::PaintJob &job, m_paintJobs) {
+            repaintRect |= m_viewConverter->documentToView().mapRect(job.docUpdateRect).toAlignedRect();
+        }
+        m_paintJobs.clear();
+
+        m_dirtyRegion = QRegion();
+        m_forceUpdateHiddenAreasOnly = false;
+    }
+
+    if (!forceUpdateHiddenAreasOnly) {
+        if (repaintRect.isEmpty()) {
+            return;
+        }
+
+        // Crop the update rect by the image bounds. We keep the cache consistent
+        // by tracking the size of the image in slotImageSizeChanged()
+        repaintRect = repaintRect.intersected(m_parentLayer->image()->bounds());
+    } else {
+        const QRectF shapesBounds = KoShape::boundingRect(m_shapeManager->shapes());
+        repaintRect |= kisGrowRect(m_viewConverter->documentToView(shapesBounds).toAlignedRect(), 2);
+    }
+
+    /**
+     * Vector shapes are not thread-safe against concurrent read-writes, so we
+     * need to utilize rather complicated policy on accessing them:
+     *
+     * 1) All shape writes happen in GUI thread (right in the tools)
+     * 2) No concurrent reads from the shapes may happen in other threads
+     *    while the user is modifying them.
+     *
+     * That is why our shape rendering code is split into two parts:
+     *
+     * 1) First we just fetch a shallow copy of the shapes of the layer (it
+     *    takes about 1ms for complicated vector layers) and pack them into
+     *    KoShapeManager::PaintJobsList jobs. It happens here, in
+     *    slotStartAsyncRepaint(), which runs in the GUI thread. It guarantees
+     *    that noone is accessing the shapes during the copy operation.
+     *
+     * 2) The rendering itself happens in the worker thread in repaint(). But
+     *    repaint() doesn't access original shapes anymore. It accesses only they
+     *    shallow copies, which means that there is no concurrent
+     *    access to anything (*).
+     *
+     * (*) "no concurrent access to anything" is a rather fragile term :) There
+     *     will still be concurrent access to it, on detaching... But(!), when detaching,
+     *     the original data is kept unchanged, so "it should be safe enough"(c). Especially
+     *     if we guarantee that rendering thread may not cause a detach (?), and the detach
+     *     can happen only from a single GUI thread.
+     */
+
+    const QVector<QRect> updateRects =
+        KritaUtils::splitRectIntoPatchesTight(repaintRect,
+                                              QSize(MASK_IMAGE_WIDTH, MASK_IMAGE_HEIGHT));
+
+    KoShapeManager::PaintJobsList jobs;
+    Q_FOREACH (const QRect &viewUpdateRect, updateRects) {
+        jobs << KoShapeManager::PaintJob(m_viewConverter->viewToDocument().mapRect(QRectF(viewUpdateRect)),
+                                         viewUpdateRect);
+    }
+
+    m_shapeManager->preparePaintJobs(jobs, m_parentLayer);
+
+    {
+        QMutexLocker locker(&m_dirtyRegionMutex);
+        m_paintJobs = jobs;
+    }
+
     m_hasUpdateInCompressor = false;
     m_image->addSpontaneousJob(new KisRepaintShapeLayerLayerJob(m_parentLayer, this));
 }
@@ -255,8 +320,10 @@ void KisShapeLayerCanvas::slotImageSizeChanged()
     dirtyCacheRegion -= m_image->bounds() & m_cachedImageRect;
 
     QVector<QRectF> dirtyRects;
-    Q_FOREACH (const QRect &rc, dirtyCacheRegion.rects()) {
-        dirtyRects.append(m_viewConverter->viewToDocument(rc));
+    auto rc = dirtyCacheRegion.begin();
+    while (rc != dirtyCacheRegion.end()) {
+        dirtyRects.append(m_viewConverter->viewToDocument(*rc));
+        rc++;
     }
     updateCanvas(dirtyRects);
 
@@ -266,42 +333,55 @@ void KisShapeLayerCanvas::slotImageSizeChanged()
 void KisShapeLayerCanvas::repaint()
 {
 
-    QRect r;
+    KoShapeManager::PaintJobsList paintJobs;
 
     {
         QMutexLocker locker(&m_dirtyRegionMutex);
-        r = m_dirtyRegion.boundingRect();
-        m_dirtyRegion = QRegion();
+        std::swap(paintJobs, m_paintJobs);
     }
 
-    if (r.isEmpty()) return;
+    const qint32 MASK_IMAGE_WIDTH = 256;
+    const qint32 MASK_IMAGE_HEIGHT = 256;
 
-    // Crop the update rect by the image bounds. We keep the cache consistent
-    // by tracking the size of the image in slotImageSizeChanged()
-    r = r.intersected(m_parentLayer->image()->bounds());
+    QImage image(MASK_IMAGE_WIDTH, MASK_IMAGE_HEIGHT, QImage::Format_ARGB32);
+    QPainter tempPainter(&image);
 
-    QImage image(r.width(), r.height(), QImage::Format_ARGB32);
-    image.fill(0);
-    QPainter p(&image);
+    tempPainter.setRenderHint(QPainter::Antialiasing);
+    tempPainter.setRenderHint(QPainter::TextAntialiasing);
 
-    p.setRenderHint(QPainter::Antialiasing);
-    p.setRenderHint(QPainter::TextAntialiasing);
-    p.translate(-r.x(), -r.y());
-    p.setClipRect(r);
-#ifdef DEBUG_REPAINT
-    QColor color = QColor(random() % 255, random() % 255, random() % 255);
-    p.fillRect(r, color);
-#endif
+    quint8 * dstData = new quint8[MASK_IMAGE_WIDTH * MASK_IMAGE_HEIGHT * m_projection->pixelSize()];
 
-    m_shapeManager->paint(p, *m_viewConverter, false);
-    p.end();
+    QRect repaintRect;
 
-    KisPaintDeviceSP dev = new KisPaintDevice(m_projection->colorSpace());
-    dev->convertFromQImage(image, 0);
+    Q_FOREACH (const KoShapeManager::PaintJob &job, paintJobs) {
+        image.fill(0);
 
-    KisPainter::copyAreaOptimized(r.topLeft(), dev, m_projection, QRect(QPoint(), r.size()));
+        tempPainter.setTransform(QTransform());
+        tempPainter.setClipRect(QRect(0,0,MASK_IMAGE_WIDTH,MASK_IMAGE_HEIGHT));
+        tempPainter.setTransform(m_viewConverter->documentToView() *
+                                 QTransform::fromTranslate(-job.viewUpdateRect.x(), -job.viewUpdateRect.y()));
 
-    m_parentLayer->setDirty(r);
+        m_shapeManager->paintJob(tempPainter, job, false);
+
+        KoColorSpaceRegistry::instance()->rgb8()
+        ->convertPixelsTo(image.constBits(), dstData, m_projection->colorSpace(),
+                          MASK_IMAGE_WIDTH * MASK_IMAGE_HEIGHT,
+                          KoColorConversionTransformation::internalRenderingIntent(),
+                          KoColorConversionTransformation::internalConversionFlags());
+
+        // TODO: use job.viewUpdateRect instead of MASK_IMAGE_WIDTH/HEIGHT
+        m_projection->writeBytes(dstData,
+                                 job.viewUpdateRect.x(),
+                                 job.viewUpdateRect.y(),
+                                 MASK_IMAGE_WIDTH,
+                                 MASK_IMAGE_HEIGHT);
+
+        repaintRect |= job.viewUpdateRect;
+    }
+
+    delete[] dstData;
+    m_projection->purgeDefaultPixels();
+    m_parentLayer->setDirty(repaintRect);
 
     m_hasChangedWhileBeingInvisible |= !m_parentLayer->visible(true);
 }
@@ -317,10 +397,29 @@ void KisShapeLayerCanvas::forceRepaint()
      * The only real solution to this is to port vector tools to strokes framework.
      */
 
-    if (m_hasUpdateInCompressor) {
+    if (hasPendingUpdates()) {
         m_asyncUpdateSignalCompressor.stop();
-        slotStartAsyncRepaint();
+        m_safeForcedConnection.start();
     }
+}
+
+bool KisShapeLayerCanvas::hasPendingUpdates() const
+{
+    return m_hasUpdateInCompressor;
+}
+
+void KisShapeLayerCanvas::forceRepaintWithHiddenAreas()
+{
+    KIS_SAFE_ASSERT_RECOVER_RETURN(m_parentLayer->image());
+    KIS_SAFE_ASSERT_RECOVER_RETURN(!m_isDestroying);
+
+    {
+        QMutexLocker locker(&m_dirtyRegionMutex);
+        m_forceUpdateHiddenAreasOnly = true;
+    }
+
+    m_asyncUpdateSignalCompressor.stop();
+    m_safeForcedConnection.start();
 }
 
 void KisShapeLayerCanvas::resetCache()
@@ -335,9 +434,8 @@ void KisShapeLayerCanvas::resetCache()
 
 void KisShapeLayerCanvas::rerenderAfterBeingInvisible()
 {
-    KIS_SAFE_ASSERT_RECOVER_RETURN(m_parentLayer->visible(true))
+    KIS_SAFE_ASSERT_RECOVER_RETURN(m_parentLayer->visible(true));
 
     m_hasChangedWhileBeingInvisible = false;
     resetCache();
 }
-

@@ -46,9 +46,7 @@ class KisAnimationCachePopulator;
 class KisSessionResource;
 
 /**
- * KisPart is the Great Deku Tree of Krita.
- *
- * It is a singleton class which provides the main entry point to the application.
+ * KisPart a singleton class which provides the main entry point to the application.
  * Krita supports multiple documents, multiple main windows, and multiple
  * components.  KisPart manages these resources and provides them to the rest of
  * Krita.  It manages lists of Actions and shortcuts as well.
@@ -131,7 +129,7 @@ public:
      */
     int mainwindowCount() const;
 
-    void addRecentURLToAllMainWindows(QUrl url);
+    void addRecentURLToAllMainWindows(QUrl url, QUrl oldUrl = QUrl());
 
     /**
      * @return the currently active main window.
@@ -145,10 +143,19 @@ public:
      */
     KisIdleWatcher *idleWatcher() const;
 
+    // ----------------- Cache Populator Management -----------------
     /**
      * @return the application-wide AnimationCachePopulator.
      */
     KisAnimationCachePopulator *cachePopulator() const;
+
+    /**
+     * Adds a frame time index to a priority stack, which should be
+     * cached immediately and irregardless of whether it is the
+     * the currently occupied frame. The process of regeneration is
+     * started immediately.
+     */
+    void prioritizeFrameForCache(KisImageSP image, int frame);
 
 public Q_SLOTS:
 
@@ -207,8 +214,7 @@ public:
      * views, and if the document wasn't known yet, it's registered as well.
      */
     KisView *createView(KisDocument *document,
-                        KoCanvasResourceManager *resourceManager,
-                        KActionCollection *actionCollection,
+                        KisViewManager *viewManager,
                         QWidget *parent);
 
     /**
@@ -259,6 +265,14 @@ public:
      * Are we in the process of closing the application through closeSession().
      */
     bool closingSession() const;
+
+    /**
+     * This function returns true if the instance has already been initialized,
+     * false otherwise. This to prevent premature initialization that causes crash
+     * on android see `1fbb25506a`
+     * @see QGlobalStatic::exists()
+     */
+    static bool exists();
 
 private Q_SLOTS:
 

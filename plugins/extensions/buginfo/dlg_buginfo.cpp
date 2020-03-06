@@ -23,19 +23,27 @@
 #include <opengl/kis_opengl.h>
 #include <KritaVersionWrapper.h>
 #include <QSysInfo>
-
+#include <kis_image_config.h>
 #include <QDesktopWidget>
 #include <QClipboard>
+#include <QThread>
+#include <QFile>
+#include <QFileInfo>
+#include <QSettings>
+#include <QStandardPaths>
+#include <KoFileDialog.h>
+#include <QMessageBox>
 
-#include "kis_document_aware_spin_box_unit_manager.h"
+#include <QScreen>
 
 DlgBugInfo::DlgBugInfo(QWidget *parent)
     : KoDialog(parent)
 {
     setCaption(i18n("Please paste this information in your bug report"));
 
-    setButtons(User1 | Ok);
+    setButtons(User1 | User2 | Ok);
     setButtonText(User1, i18n("Copy to clipboard"));
+    setButtonText(User2, i18n("Save to file"));
     setDefaultButton(Ok);
 
     m_page = new WdgBugInfo(this);
@@ -43,11 +51,82 @@ DlgBugInfo::DlgBugInfo(QWidget *parent)
 
     setMainWidget(m_page);
 
+    connect(this, &KoDialog::user1Clicked, this, [this](){
+        QGuiApplication::clipboard()->setText(m_page->txtBugInfo->toPlainText());
+        m_page->txtBugInfo->selectAll(); // feedback
+    });
+
+    connect(this, &KoDialog::user2Clicked, this, &DlgBugInfo::saveToFile);
+
+}
+
+void DlgBugInfo::initialize()
+{
+    initializeText();
+    setCaption(captionText());
+}
+
+void DlgBugInfo::initializeText()
+{
+    const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation);
+    QSettings kritarc(configPath + QStringLiteral("/kritadisplayrc"), QSettings::IniFormat);
+
+    QString info = infoText(kritarc);
+
+    // calculate a default height for the widget
+    int wheight = m_page->sizeHint().height();
+    m_page->txtBugInfo->setText(info);
+
+    QFontMetrics fm = m_page->txtBugInfo->fontMetrics();
+    int target_height = fm.height() * info.split('\n').size() + wheight;
+
+    QRect screen_rect = QGuiApplication::primaryScreen()->availableGeometry();
+
+    resize(m_page->size().width(), target_height > screen_rect.height() ? screen_rect.height() : target_height);
+}
+
+void DlgBugInfo::saveToFile()
+{
+    KoFileDialog dlg(this, KoFileDialog::SaveFile, i18n("Save to file"));
+    dlg.setDefaultDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/" + defaultNewFileName());
+    dlg.setMimeTypeFilters(QStringList("text/plain"), "text/plain");
+    QString filename = dlg.filename();
+
+    if (filename.isEmpty()) {
+        return;
+    } else {
+
+        QString originalLogFileName = originalFileName();
+        if (!originalLogFileName.isEmpty() && QFileInfo(originalLogFileName).exists())
+        {
+            QFile::copy(originalLogFileName, filename);
+        } else {
+
+            QFile file(filename);
+            if (!file.open(QIODevice::WriteOnly)) {
+                QMessageBox::information(this, i18n("Unable to open file"),
+                    file.errorString());
+                return;
+            }
+            QTextStream out(&file);
+            out << m_page->txtBugInfo->toPlainText();
+            file.close();
+        }
+    }
+}
+
+QString DlgBugInfo::basicSystemInformationReplacementText()
+{
     QString info;
 
     // Krita version info
     info.append("Krita");
     info.append("\n  Version: ").append(KritaVersionWrapper::versionString(true));
+    info.append("\n\n");
+
+    info.append("Qt");
+    info.append("\n  Version (compiled): ").append(QT_VERSION_STR);
+    info.append("\n  Version (loaded): ").append(qVersion());
     info.append("\n\n");
 
     // OS information
@@ -60,29 +139,45 @@ DlgBugInfo::DlgBugInfo(QWidget *parent)
     info.append("\n  Pretty Productname: ").append(QSysInfo::prettyProductName());
     info.append("\n  Product Type: ").append(QSysInfo::productType());
     info.append("\n  Product Version: ").append(QSysInfo::productVersion());
-    info.append("\n");
+    info.append("\n\n");
 
     // OpenGL information
     info.append("\n").append(KisOpenGL::getDebugText());
+    info.append("\n\n");
+    // Hardware information
+    info.append("Hardware Information");
+    info.append(QString("\n Memory: %1").arg(KisImageConfig(true).totalRAM() / 1024)).append(" Gb");
+    info.append(QString("\n Cores: %1").arg(QThread::idealThreadCount()));
+    info.append("\n Swap: ").append(KisImageConfig(true).swapDir());
 
-    // Installation information
+    return info;
+}
 
-    // calculate a default height for the widget
-    int wheight = m_page->sizeHint().height();
-    m_page->txtBugInfo->setText(info);
+QString DlgBugInfo::infoText(QSettings& kritarc)
+{
+    QString info;
 
-    QFontMetrics fm = m_page->txtBugInfo->fontMetrics();
-    int target_height = fm.height() * info.split('\n').size() + wheight;
+    if (!kritarc.value("LogUsage", true).toBool() || !QFileInfo(originalFileName()).exists()) {
 
-    QDesktopWidget dw;
-    QRect screen_rect = dw.availableGeometry(dw.primaryScreen());
+        // NOTE: This is intentionally not translated!
 
-    resize(m_page->size().width(), target_height > screen_rect.height() ? screen_rect.height() : target_height);
+        info.append(replacementWarningText());
+        info.append("File name and location: " + originalFileName());
+        info.append("------------------------------------");
+        info.append("\n\n");
 
-    connect(this, &KoDialog::user1Clicked, this, [this](){
-        QGuiApplication::clipboard()->setText(m_page->txtBugInfo->toPlainText());
-        m_page->txtBugInfo->selectAll(); // feedback
-    });
+        info.append(basicSystemInformationReplacementText());
+    }
+    else {
+
+        QFile log(originalFileName());
+        log.open(QFile::ReadOnly | QFile::Text);
+        info += QString::fromUtf8(log.readAll());
+        log.close();
+    }
+
+    return info;
+
 }
 
 DlgBugInfo::~DlgBugInfo()

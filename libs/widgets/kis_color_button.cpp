@@ -20,7 +20,7 @@
 
 #include "kis_color_button.h"
 
-#include <QtCore/QPointer>
+#include <QPointer>
 #include <QPainter>
 #include <qdrawutil.h>
 #include <QApplication>
@@ -39,6 +39,11 @@ class KisColorButton::KisColorButtonPrivate
 {
 public:
     KisColorButtonPrivate(KisColorButton *q);
+    ~KisColorButtonPrivate() {
+        if (dialogPtr) {
+            dialogPtr.data()->close();
+        }
+    }
 
     void _k_chooseColor();
     void _k_colorChosen();
@@ -51,7 +56,7 @@ public:
 
     KoColor col;
     QPoint mPos;
-#ifndef Q_OS_OSX
+#ifndef Q_OS_MACOS
     QPointer<KisDlgInternalColorSelector> dialogPtr;
 #else
     QPointer<QColorDialog> dialogPtr;
@@ -250,7 +255,7 @@ void KisColorButton::paintEvent(QPaintEvent *)
         QStyleOptionFocusRect focusOpt;
         focusOpt.init(this);
         focusOpt.rect            = focusRect;
-        focusOpt.backgroundColor = palette().background().color();
+        focusOpt.backgroundColor = palette().window().color();
         style->drawPrimitive(QStyle::PE_FrameFocusRect, &focusOpt, &painter, this);
     }
 }
@@ -259,16 +264,14 @@ QSize KisColorButton::sizeHint() const
 {
     QStyleOptionButton opt;
     d->initStyleOption(&opt);
-    return style()->sizeFromContents(QStyle::CT_PushButton, &opt, QSize(40, 15), this).
-           expandedTo(QApplication::globalStrut());
+    return style()->sizeFromContents(QStyle::CT_PushButton, &opt, QSize(40, 15), this);
 }
 
 QSize KisColorButton::minimumSizeHint() const
 {
     QStyleOptionButton opt;
     d->initStyleOption(&opt);
-    return style()->sizeFromContents(QStyle::CT_PushButton, &opt, QSize(3, 3), this).
-           expandedTo(QApplication::globalStrut());
+    return style()->sizeFromContents(QStyle::CT_PushButton, &opt, QSize(3, 3), this);
 }
 
 void KisColorButton::dragEnterEvent(QDragEnterEvent *event)
@@ -314,20 +317,20 @@ void KisColorButton::mouseMoveEvent(QMouseEvent *e)
 {
     if ((e->buttons() & Qt::LeftButton) &&
             (e->pos() - d->mPos).manhattanLength() > QApplication::startDragDistance()) {
-        _k_createDrag(color(), this)->start();
+        _k_createDrag(color(), this)->exec();
         setDown(false);
     }
 }
 
 void KisColorButton::KisColorButtonPrivate::_k_chooseColor()
 {
-#ifndef Q_OS_OSX
+#ifndef Q_OS_MACOS
     KisDlgInternalColorSelector *dialog = dialogPtr.data();
 #else
     QColorDialog *dialog = dialogPtr.data();
 #endif
     if (dialog) {
-#ifndef Q_OS_OSX
+#ifndef Q_OS_MACOS
         dialog->setPreviousColor(q->color());
 #else
         dialog->setCurrentColor(q->color().toQColor());
@@ -340,11 +343,11 @@ void KisColorButton::KisColorButtonPrivate::_k_chooseColor()
 
     KisDlgInternalColorSelector::Config cfg;
     cfg.paletteBox = q->paletteViewEnabled();
-#ifndef Q_OS_OSX
+#ifndef Q_OS_MACOS
     dialog = new KisDlgInternalColorSelector(q,
-                                          q->color(),
-                                          cfg,
-                                          i18n("Choose a color"));
+                                             q->color(),
+                                             cfg,
+                                             i18n("Choose a color"));
 #else
     dialog = new QColorDialog(q);
     dialog->setOption(QColorDialog::ShowAlphaChannel, m_alphaChannel);
@@ -352,17 +355,17 @@ void KisColorButton::KisColorButtonPrivate::_k_chooseColor()
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     connect(dialog, SIGNAL(accepted()), q, SLOT(_k_colorChosen()));
     dialogPtr = dialog;
-#ifndef Q_OS_OSX
-        dialog->setPreviousColor(q->color());
+#ifndef Q_OS_MACOS
+    dialog->setPreviousColor(q->color());
 #else
-        dialog->setCurrentColor(q->color().toQColor());
+    dialog->setCurrentColor(q->color().toQColor());
 #endif
     dialog->show();
 }
 
 void KisColorButton::KisColorButtonPrivate::_k_colorChosen()
 {
-#ifndef Q_OS_OSX
+#ifndef Q_OS_MACOS
     KisDlgInternalColorSelector *dialog = dialogPtr.data();
 #else
     QColorDialog *dialog = dialogPtr.data();
@@ -370,7 +373,7 @@ void KisColorButton::KisColorButtonPrivate::_k_colorChosen()
     if (!dialog) {
         return;
     }
-#ifndef Q_OS_OSX
+#ifndef Q_OS_MACOS
     q->setColor(dialog->getCurrentColor());
 #else
     KoColor c;

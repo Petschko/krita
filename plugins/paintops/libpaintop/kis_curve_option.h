@@ -26,7 +26,6 @@
 
 #include "kis_paintop_option.h"
 #include "kis_global.h"
-#include "kis_paintop_option.h"
 #include <brushengine/kis_paint_information.h>
 #include "kritapaintop_export.h"
 #include "kis_dynamic_sensor.h"
@@ -61,6 +60,11 @@ public:
     virtual void readOptionSetting(KisPropertiesConfigurationSP setting);
     virtual void lodLimitations(KisPaintopLodLimitations *l) const;
 
+    //Please override for other values than 0-100 and %
+    virtual int intMinValue()const;
+    virtual int intMaxValue()const;
+    virtual QString valueSuffix()const;
+
     const QString& name() const;
     KisPaintOpOption::PaintopCategory category() const;
     qreal minValue() const;
@@ -81,6 +85,12 @@ public:
 
     int getCurveMode() const;
 
+    /**
+     * Returns the curve that is being used instead of sensor ones
+     * in case "Use the same curve" is checked.
+     */
+    KisCubicCurve getCommonCurve() const;
+
     void setSeparateCurveValue(bool separateCurveValue);
 
     void setChecked(bool checked);
@@ -88,6 +98,17 @@ public:
     void setCurve(DynamicSensorType sensorType, bool useSameCurve, const KisCubicCurve &curve);
     void setValue(qreal value);
     void setCurveMode(int mode);
+
+    /**
+     * Sets the bool indicating whether "Share curve across all settings" is checked.
+     */
+    void setUseSameCurve(bool useSameCurve);
+
+    /**
+     * Sets the curve that is being used instead of sensor ones
+     * in case "Share curve across all settings" is checked.
+     */
+    void setCommonCurve(KisCubicCurve curve);
 
     struct ValueComponents {
 
@@ -113,7 +134,7 @@ public:
         qreal maxSizeLikeValue;
 
         /**
-         * @param normalizedBaseAngle canvas rotation alngle normalized to range [0; 1]
+         * @param normalizedBaseAngle canvas rotation angle normalized to range [0; 1]
          * @param absoluteAxesFlipped true if underlying image coordinate system is flipped (horiz. mirror != vert. mirror)
          */
 
@@ -126,7 +147,7 @@ public:
             const qreal realScalingPart = hasScaling ? KisDynamicSensor::scalingToAdditive(scaling) : 0.0;
             const qreal realAdditivePart = hasAdditive ? additive : 0;
 
-            qreal value = wrapInRange(2 * offset + constant * realScalingPart + realAdditivePart, -1.0, 1.0);
+            qreal value = wrapInRange(2 * offset + constant * (realScalingPart + realAdditivePart), -1.0, 1.0);
             if (qIsNaN(value)) {
                 qWarning() << "rotationLikeValue returns NaN!" << normalizedBaseAngle << absoluteAxesFlipped;
                 value = 0;
@@ -168,13 +189,26 @@ public:
      * Uses the curves set on the sensors to compute a single
      * double value that can control the parameters of a brush.
      *
-     * This value is derives from the falues stored in
-     * ValuesComponents opject.
+     * This value is derives from the values stored in
+     * ValuesComponents object.
      */
     ValueComponents computeValueComponents(const KisPaintInformation& info) const;
 
     qreal computeSizeLikeValue(const KisPaintInformation &info) const;
     qreal computeRotationLikeValue(const KisPaintInformation& info, qreal baseValue, bool absoluteAxesFlipped) const;
+
+    /**
+     * @brief defaultCurve returns a curve that is set when the KisCurveOption is not initialized yet
+     * the purpose of distinguishing between this one and emptyCurve() is to allow easier finding out that something is wrong
+     * in the code setting common curves
+     * @return a non-standard curve with two hills
+     */
+    KisCubicCurve defaultCurve();
+    /**
+     * @brief emptyCurve returns the simplest usable curve
+     * @return curve from (0, 0) to (1, 1)
+     */
+    KisCubicCurve emptyCurve();
 
 protected:
 
@@ -194,10 +228,15 @@ protected:
     bool m_useSameCurve;
     bool m_separateCurveValue;
 
+    /**
+     * Curve that is being used instead of sensors' internal ones
+     * in case "Use the same curve" is checked.
+     */
+    KisCubicCurve m_commonCurve;
+
     int m_curveMode;
 
     QMap<DynamicSensorType, KisDynamicSensorSP> m_sensorMap;
-    QMap<DynamicSensorType, KisCubicCurve> m_curveCache;
 
 private:
 

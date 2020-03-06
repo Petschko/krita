@@ -53,6 +53,8 @@ public:
 
     void loadBinaryData(KoStore* store, KisImageSP image, const QString & uri, bool external);
 
+    void loadPalettes(KoStore *store, KisDocument *doc);
+
     vKisNodeSP selectedNodes() const;
 
     // it's neater to follow the same design as with selectedNodes, so let's have a getter here
@@ -63,6 +65,12 @@ public:
 
     /// if not empty, loading didn't fail, but there are problems
     QStringList warningMessages() const;
+
+    /// Returns the name of the image as defined in maindoc.xml. This might
+    /// be different from the name of the image as used in the path to the
+    /// layers, because before Krita 4.2, under some circumstances, this
+    /// string is in utf8, but the paths were stored in a different encoding.
+    QString imageName() const;
 
 private:
 
@@ -108,6 +116,7 @@ private:
     void loadAssistantsList(const KoXmlElement& elem);
     void loadGrid(const KoXmlElement& elem);
     void loadGuides(const KoXmlElement& elem);
+    void loadMirrorAxis(const KoXmlElement& elem);
     void loadAudio(const KoXmlElement& elem, KisImageSP image);
 private:
 

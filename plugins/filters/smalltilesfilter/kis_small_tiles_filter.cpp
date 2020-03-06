@@ -61,7 +61,7 @@ KisSmallTilesFilter::KisSmallTilesFilter() : KisFilter(id(), FiltersCategoryMapI
 }
 
 void KisSmallTilesFilter::processImpl(KisPaintDeviceSP device,
-                                      const QRect& /*applyRect*/,
+                                      const QRect& applyRect,
                                       const KisFilterConfigurationSP config,
                                       KoUpdater* progressUpdater
                                       ) const
@@ -69,15 +69,17 @@ void KisSmallTilesFilter::processImpl(KisPaintDeviceSP device,
     Q_ASSERT(!device.isNull());
 
     //read the filter configuration values from the KisFilterConfiguration object
-    quint32 numberOfTiles = config->getInt("numberOfTiles", 2);
+    const quint32 numberOfTiles = config->getInt("numberOfTiles", 2);
 
-    QRect srcRect = device->exactBounds();
+    const QRect srcRect = applyRect;
 
-    int w = static_cast<int>(srcRect.width() / numberOfTiles);
-    int h = static_cast<int>(srcRect.height() / numberOfTiles);
+    const int w = static_cast<int>(srcRect.width() / numberOfTiles);
+    const int h = static_cast<int>(srcRect.height() / numberOfTiles);
 
-    KisPaintDeviceSP tile = device->createThumbnailDevice(srcRect.width() / numberOfTiles, srcRect.height() / numberOfTiles);
+    KisPaintDeviceSP tile = device->createThumbnailDevice(w, h);
     if (tile.isNull()) return;
+
+    device->clear(applyRect);
 
     KisPainter gc(device);
     gc.setCompositeOp(COMPOSITE_COPY);
@@ -95,7 +97,7 @@ void KisSmallTilesFilter::processImpl(KisPaintDeviceSP device,
     gc.end();
 }
 
-KisConfigWidget * KisSmallTilesFilter::createConfigurationWidget(QWidget* parent, const KisPaintDeviceSP) const
+KisConfigWidget * KisSmallTilesFilter::createConfigurationWidget(QWidget* parent, const KisPaintDeviceSP, bool) const
 {
     vKisIntegerWidgetParam param;
     param.push_back(KisIntegerWidgetParam(2, 5, 1, i18n("Number of tiles"), "numberOfTiles"));
@@ -103,9 +105,9 @@ KisConfigWidget * KisSmallTilesFilter::createConfigurationWidget(QWidget* parent
 
 }
 
-KisFilterConfigurationSP KisSmallTilesFilter::factoryConfiguration() const
+KisFilterConfigurationSP KisSmallTilesFilter::defaultConfiguration() const
 {
-    KisFilterConfigurationSP config = new KisFilterConfiguration("smalltiles", 1);
+    KisFilterConfigurationSP config = factoryConfiguration();
     config->setProperty("numberOfTiles", 2);
     return config;
 }

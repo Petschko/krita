@@ -56,7 +56,7 @@ public:
     KoShape* cloneShape() const override;
 
     /// This implementation is empty since a group is itself not visible.
-    void paintComponent(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintcontext) override;
+    void paintComponent(QPainter &painter, KoShapePaintingContext &paintcontext) const override;
     /// always returns false since the group itself can't be selected or hit
     bool hitTest(const QPointF &position) const override;
     QSizeF size() const override;
@@ -85,9 +85,12 @@ private:
     KoShapeGroup(const KoShapeGroup &rhs);
 
 private:
+    void tryUpdateCachedSize() const;
+
     void shapeChanged(ChangeType type, KoShape *shape = 0) override;
 
-    Q_DECLARE_PRIVATE(KoShapeGroup)
+    class Private;
+    QScopedPointer<Private> d;
 };
 
 #endif

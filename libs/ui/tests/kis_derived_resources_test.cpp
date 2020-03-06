@@ -23,7 +23,7 @@
 
 #include <QApplication>
 
-#include <KoCanvasResourceManager.h>
+#include <KoCanvasResourceProvider.h>
 
 #include "kis_canvas_resource_provider.h"
 #include <util.h>
@@ -65,10 +65,10 @@ void addResourceTypes()
     KoResourcePaths::addResourceType("psd_layer_style_collections", "data", "/asl");
     KoResourcePaths::addResourceType("tags", "data", "/tags/");
 
-    KisOpenGL::setDefaultFormat(false, false);
+    KisOpenGL::testingInitializeDefaultSurfaceFormat();
 
     KisConfig cfg(false);
-    cfg.setUseOpenGL(false);
+    cfg.disableOpenGL();
 }
 
 void KisDerivedResourcesTest::test()
@@ -80,9 +80,9 @@ void KisDerivedResourcesTest::test()
 
 
     KisMainWindow* mainWindow = KisPart::instance()->createMainWindow();
-    QPointer<KisView> view = new KisView(doc, mainWindow->resourceManager(), mainWindow->actionCollection(), mainWindow);
+    QPointer<KisView> view = new KisView(doc, mainWindow->viewManager(), mainWindow);
     KisViewManager *viewManager = new KisViewManager(mainWindow, mainWindow->actionCollection());
-    KoCanvasResourceManager *manager = viewManager->resourceProvider()->resourceManager();
+    KoCanvasResourceProvider *manager = viewManager->canvasResourceProvider()->resourceManager();
 
     QApplication::processEvents();
 
@@ -103,7 +103,7 @@ void KisDerivedResourcesTest::test()
 
     QVERIFY(i.isValid());
 
-    QSignalSpy spy(manager, SIGNAL(canvasResourceChanged(int, const QVariant &)));
+    QSignalSpy spy(manager, SIGNAL(canvasResourceChanged(int,QVariant)));
 
     manager->setResource(KisCanvasResourceProvider::CurrentPaintOpPreset, i);
 

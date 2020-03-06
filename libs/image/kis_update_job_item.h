@@ -28,6 +28,9 @@
 #include "kis_spontaneous_job.h"
 #include "kis_base_rects_walker.h"
 #include "kis_async_merger.h"
+#include "kis_updater_context.h"
+
+//#define DEBUG_JOBS_SEQUENCE
 
 
 class KisUpdateJobItem :  public QObject, public QRunnable
@@ -43,10 +46,8 @@ public:
     };
 
 public:
-    KisUpdateJobItem(QReadWriteLock *exclusiveJobLock)
-        : m_exclusiveJobLock(exclusiveJobLock),
-          m_atomicType(Type::EMPTY),
-          m_runnableJob(0)
+    KisUpdateJobItem(KisUpdaterContext *updaterContext)
+        : m_updaterContext(updaterContext)
     {
         setAutoDelete(false);
         KIS_SAFE_ASSERT_RECOVER_NOOP(m_atomicType.is_lock_free());
@@ -76,9 +77,9 @@ public:
             KIS_SAFE_ASSERT_RECOVER_RETURN(isRunning());
 
             if(m_exclusive) {
-                m_exclusiveJobLock->lockForWrite();
+                m_updaterContext->m_exclusiveJobLock.lockForWrite();
             } else {
-                m_exclusiveJobLock->lockForRead();
+                m_updaterContext->m_exclusiveJobLock.lockForRead();
             }
 
             if(m_atomicType == Type::MERGE) {
@@ -87,18 +88,29 @@ public:
                 KIS_ASSERT(m_atomicType == Type::STROKE ||
                            m_atomicType == Type::SPONTANEOUS);
 
-                m_runnableJob->run();
+                if (m_runnableJob) {
+#ifdef DEBUG_JOBS_SEQUENCE
+                    if (m_atomicType == Type::STROKE) {
+                        qDebug() << "running: stroke" << m_runnableJob->debugName();
+                    } else if (m_atomicType == Type::SPONTANEOUS) {
+                        qDebug() << "running: spont " << m_runnableJob->debugName();
+                    } else {
+                        qDebug() << "running: unkn. " << m_runnableJob->debugName();
+                    }
+#endif
+
+                    m_runnableJob->run();
+                }
             }
 
             setDone();
 
-
-            emit sigDoSomeUsefulWork();
+            m_updaterContext->doSomeUsefulWork();
 
             // may flip the current state from Waiting -> Running again
-            emit sigJobFinished();
+            m_updaterContext->jobFinished();
 
-            m_exclusiveJobLock->unlock();
+            m_updaterContext->m_exclusiveJobLock.unlock();
 
             // try to exit the loop. Please note, that no one can flip the state from
             // WAITING to EMPTY except ourselves!
@@ -114,10 +126,16 @@ public:
         KIS_SAFE_ASSERT_RECOVER_RETURN(m_walker);
         // dbgKrita << "Executing merge job" << m_walker->changeRect()
         //          << "on thread" << QThread::currentThreadId();
+
+#ifdef DEBUG_JOBS_SEQUENCE
+        qDebug() << "running: merge " << m_walker->startNode() << m_walker->changeRect();
+
+#endif
+
         m_merger.startMerge(*m_walker);
 
         QRect changeRect = m_walker->changeRect();
-        emit sigContinueUpdate(changeRect);
+        m_updaterContext->continueUpdate(changeRect);
     }
 
     // return true if the thread should actually be started
@@ -191,20 +209,16 @@ public:
         return m_strokeJobSequentiality;
     }
 
-Q_SIGNALS:
-    void sigContinueUpdate(const QRect& rc);
-    void sigDoSomeUsefulWork();
-    void sigJobFinished();
-
 private:
     /**
      * Open walker and stroke job for the testing suite.
      * Please, do not use it in production code.
      */
+    friend class KisTestableUpdaterContext;
     friend class KisSimpleUpdateQueueTest;
     friend class KisStrokesQueueTest;
     friend class KisUpdateSchedulerTest;
-    friend class KisTestableUpdaterContext;
+    friend class KisUpdaterContext;
 
     inline KisBaseRectsWalkerSP walker() const {
         return m_walker;
@@ -222,27 +236,20 @@ private:
     }
 
 private:
-    /**
-     * \see KisUpdaterContext::m_exclusiveJobLock
-     */
-    QReadWriteLock *m_exclusiveJobLock;
-
-    bool m_exclusive;
-
-    std::atomic<Type> m_atomicType;
-
+    KisUpdaterContext *m_updaterContext {0};
+    bool m_exclusive {false};
+    std::atomic<Type> m_atomicType {Type::EMPTY};
     volatile KisStrokeJobData::Sequentiality m_strokeJobSequentiality;
 
     /**
      * Runnable jobs part
      * The job is owned by the context and deleted after completion
      */
-    KisRunnable *m_runnableJob;
+    KisRunnableWithDebugName *m_runnableJob {0};
 
     /**
      * Merge jobs part
      */
-
     KisBaseRectsWalkerSP m_walker;
     KisAsyncMerger m_merger;
 

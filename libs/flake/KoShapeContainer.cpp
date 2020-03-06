@@ -23,7 +23,6 @@
 #include "KoShapeStrokeModel.h"
 #include "SimpleShapeContainerModel.h"
 #include "KoShapeSavingContext.h"
-#include "KoViewConverter.h"
 
 #include <QPointF>
 #include <QPainter>
@@ -32,53 +31,39 @@
 #include "kis_painting_tweaks.h"
 #include "kis_assert.h"
 
-KoShapeContainerPrivate::KoShapeContainerPrivate(KoShapeContainer *q)
-    : KoShapePrivate(q),
-      shapeInterface(q),
-      model(0)
+KoShapeContainer::Private::Private(KoShapeContainer *q)
+    : shapeInterface(q)
+    , model(0)
 {
 }
 
-KoShapeContainerPrivate::~KoShapeContainerPrivate()
+KoShapeContainer::Private::~Private()
 {
     delete model;
 }
 
-KoShapeContainerPrivate::KoShapeContainerPrivate(const KoShapeContainerPrivate &rhs, KoShapeContainer *q)
-    : KoShapePrivate(rhs, q),
-      shapeInterface(q),
-      model(0)
+KoShapeContainer::Private::Private(const KoShapeContainer::Private &rhs, KoShapeContainer *q)
+    : shapeInterface(q)
+    , model(0)
 {
+    Q_UNUSED(rhs);
 }
 
 KoShapeContainer::KoShapeContainer(KoShapeContainerModel *model)
-    : KoShape(new KoShapeContainerPrivate(this))
+    : KoShape()
+    , d(new Private(this))
 {
-    Q_D(KoShapeContainer);
     d->model = model;
 }
 
-KoShapeContainer::KoShapeContainer(KoShapeContainerPrivate *dd)
-    : KoShape(dd)
+KoShapeContainer::KoShapeContainer(const KoShapeContainer &rhs)
+    : KoShape(rhs)
+    , d(new Private(*(rhs.d.data()), this))
 {
-    Q_D(KoShapeContainer);
-
-    // HACK ALERT: the shapes are copied inside the model,
-    //             but we still need to connect the to the
-    //             hierarchy here!
-    if (d->model) {
-        Q_FOREACH (KoShape *shape, d->model->shapes()) {
-            if (shape) { // Note: shape can be 0 because not all shapes
-                //       implement cloneShape, e.g. the text shape.
-                shape->setParent(this);
-            }
-        }
-    }
 }
 
 KoShapeContainer::~KoShapeContainer()
 {
-    Q_D(KoShapeContainer);
     if (d->model) {
         d->model->deleteOwnedShapes();
     }
@@ -94,9 +79,8 @@ void KoShapeContainer::removeShape(KoShape *shape)
     shape->setParent(0);
 }
 
-int  KoShapeContainer::shapeCount() const
+int KoShapeContainer::shapeCount() const
 {
-    Q_D(const KoShapeContainer);
     if (d->model == 0)
         return 0;
     return d->model->count();
@@ -104,7 +88,6 @@ int  KoShapeContainer::shapeCount() const
 
 void KoShapeContainer::setClipped(const KoShape *child, bool clipping)
 {
-    Q_D(KoShapeContainer);
     if (d->model == 0)
         return;
     d->model->setClipped(child, clipping);
@@ -112,7 +95,6 @@ void KoShapeContainer::setClipped(const KoShape *child, bool clipping)
 
 void KoShapeContainer::setInheritsTransform(const KoShape *shape, bool inherit)
 {
-    Q_D(KoShapeContainer);
     if (d->model == 0)
         return;
     d->model->setInheritsTransform(shape, inherit);
@@ -120,27 +102,24 @@ void KoShapeContainer::setInheritsTransform(const KoShape *shape, bool inherit)
 
 bool KoShapeContainer::inheritsTransform(const KoShape *shape) const
 {
-    Q_D(const KoShapeContainer);
     if (d->model == 0)
         return false;
     return d->model->inheritsTransform(shape);
 }
 
-void KoShapeContainer::paint(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintcontext)
+void KoShapeContainer::paint(QPainter &painter, KoShapePaintingContext &paintcontext) const
 {
     // Shape container paints only its internal component part. All the children are rendered
     // by the shape manager itself
 
-    Q_D(KoShapeContainer);
     painter.save();
-    paintComponent(painter, converter, paintcontext);
+    paintComponent(painter, paintcontext);
     painter.restore();
 }
 
 void KoShapeContainer::shapeChanged(ChangeType type, KoShape* shape)
 {
     Q_UNUSED(shape);
-    Q_D(KoShapeContainer);
     if (d->model == 0)
         return;
     if (!(type == RotationChanged || type == ScaleChanged || type == ShearChanged
@@ -153,7 +132,6 @@ void KoShapeContainer::shapeChanged(ChangeType type, KoShape* shape)
 
 bool KoShapeContainer::isClipped(const KoShape *child) const
 {
-    Q_D(const KoShapeContainer);
     if (d->model == 0) // throw exception??
         return false;
     return d->model->isClipped(child);
@@ -161,7 +139,6 @@ bool KoShapeContainer::isClipped(const KoShape *child) const
 
 void KoShapeContainer::update() const
 {
-    Q_D(const KoShapeContainer);
     KoShape::update();
     if (d->model)
         Q_FOREACH (KoShape *shape, d->model->shapes())
@@ -170,7 +147,6 @@ void KoShapeContainer::update() const
 
 QList<KoShape*> KoShapeContainer::shapes() const
 {
-    Q_D(const KoShapeContainer);
     if (d->model == 0)
         return QList<KoShape*>();
 
@@ -179,13 +155,32 @@ QList<KoShape*> KoShapeContainer::shapes() const
 
 KoShapeContainerModel *KoShapeContainer::model() const
 {
-    Q_D(const KoShapeContainer);
     return d->model;
+}
+
+void KoShapeContainer::setModel(KoShapeContainerModel *model)
+{
+    d->model = model;
+}
+
+void KoShapeContainer::setModelInit(KoShapeContainerModel *model)
+{
+    setModel(model);
+    // HACK ALERT: the shapes are copied inside the model,
+    //             but we still need to connect the to the
+    //             hierarchy here!
+    if (d->model) {
+        Q_FOREACH (KoShape *shape, d->model->shapes()) {
+            if (shape) { // Note: shape can be 0 because not all shapes
+                //       implement cloneShape, e.g. the text shape.
+                shape->setParent(this);
+            }
+        }
+    }
 }
 
 KoShapeContainer::ShapeInterface *KoShapeContainer::shapeInterface()
 {
-    Q_D(KoShapeContainer);
     return &d->shapeInterface;
 }
 
@@ -196,7 +191,7 @@ KoShapeContainer::ShapeInterface::ShapeInterface(KoShapeContainer *_q)
 
 void KoShapeContainer::ShapeInterface::addShape(KoShape *shape)
 {
-    KoShapeContainerPrivate * const d = q->d_func();
+    KoShapeContainer::Private * const d = q->d.data();
 
     KIS_SAFE_ASSERT_RECOVER_RETURN(shape);
 
@@ -219,7 +214,7 @@ void KoShapeContainer::ShapeInterface::addShape(KoShape *shape)
 
 void KoShapeContainer::ShapeInterface::removeShape(KoShape *shape)
 {
-    KoShapeContainerPrivate * const d = q->d_func();
+    KoShapeContainer::Private * const d = q->d.data();
 
     KIS_SAFE_ASSERT_RECOVER_RETURN(shape);
     KIS_SAFE_ASSERT_RECOVER_RETURN(d->model);

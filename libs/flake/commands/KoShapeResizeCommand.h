@@ -45,11 +45,17 @@ public:
     void redoImpl() override;
     void undoImpl() override;
 
+    QMap<KoShape*, QRectF> redoNoUpdate();
+    QMap<KoShape*, QRectF> undoNoUpdate();
+
     int id() const override;
     bool mergeWith(const KUndo2Command *command) override;
 
+    void replaceResizeAction(qreal scaleX, qreal scaleY,
+                             const QPointF &absoluteStillPoint);
+
 private:
-    class Private;
+    struct Private;
     QScopedPointer<Private> const m_d;
 
 };

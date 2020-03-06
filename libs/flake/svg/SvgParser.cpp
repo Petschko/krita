@@ -54,6 +54,7 @@
 #include <KoClipPath.h>
 #include <KoClipMask.h>
 #include <KoXmlNS.h>
+#include <QXmlSimpleReader>
 
 #include "SvgUtil.h"
 #include "SvgShape.h"
@@ -141,7 +142,44 @@ SvgParser::SvgParser(KoDocumentResourceManager *documentResourceManager)
 
 SvgParser::~SvgParser()
 {
-    qDeleteAll(m_symbols);
+}
+
+KoXmlDocument SvgParser::createDocumentFromSvg(QIODevice *device, QString *errorMsg, int *errorLine, int *errorColumn)
+{
+    QXmlInputSource source(device);
+    return createDocumentFromSvg(&source, errorMsg, errorLine, errorColumn);
+}
+
+KoXmlDocument SvgParser::createDocumentFromSvg(const QByteArray &data, QString *errorMsg, int *errorLine, int *errorColumn)
+{
+    QXmlInputSource source;
+    source.setData(data);
+
+    return createDocumentFromSvg(&source, errorMsg, errorLine, errorColumn);
+}
+
+KoXmlDocument SvgParser::createDocumentFromSvg(const QString &data, QString *errorMsg, int *errorLine, int *errorColumn)
+{
+    QXmlInputSource source;
+    source.setData(data);
+
+    return createDocumentFromSvg(&source, errorMsg, errorLine, errorColumn);
+}
+
+KoXmlDocument SvgParser::createDocumentFromSvg(QXmlInputSource *source, QString *errorMsg, int *errorLine, int *errorColumn)
+{
+    // we should read all spaces to parse text node correctly
+    QXmlSimpleReader reader;
+    reader.setFeature("http://qt-project.org/xml/features/report-whitespace-only-CharData", true);
+    reader.setFeature("http://xml.org/sax/features/namespaces", false);
+    reader.setFeature("http://xml.org/sax/features/namespace-prefixes", true);
+
+    QDomDocument doc;
+    if (!doc.setContent(source, &reader, errorMsg, errorLine, errorColumn)) {
+        return QDomDocument();
+    }
+
+    return doc;
 }
 
 void SvgParser::setXmlBaseDir(const QString &baseDir)
@@ -152,7 +190,9 @@ void SvgParser::setXmlBaseDir(const QString &baseDir)
         [this](const QString &name) {
             const QString fileName = m_context.xmlBaseDir() + QDir::separator() + name;
             QFile file(fileName);
-            KIS_SAFE_ASSERT_RECOVER_RETURN_VALUE(file.exists(), QByteArray());
+            if (!file.exists()) {
+                return QByteArray();
+            }
             file.open(QIODevice::ReadOnly);
             return file.readAll();
         });
@@ -185,7 +225,7 @@ QList<KoShape*> SvgParser::shapes() const
 
 QVector<KoSvgSymbol *> SvgParser::takeSymbols()
 {
-    QVector<KoSvgSymbol*> symbols = m_symbols;
+    QVector<KoSvgSymbol*> symbols = m_symbols.values().toVector();
     m_symbols.clear();
     return symbols;
 }
@@ -495,7 +535,7 @@ QSharedPointer<KoVectorPatternBackground> SvgParser::parsePattern(const KoXmlEle
      * correct (DK)
      */
 
-   const QTransform dstShapeTransform = shape->absoluteTransformation(0);
+   const QTransform dstShapeTransform = shape->absoluteTransformation();
    const QTransform shapeOffsetTransform = dstShapeTransform * gc->matrix.inverted();
    KIS_SAFE_ASSERT_RECOVER_NOOP(shapeOffsetTransform.type() <= QTransform::TxTranslate);
    const QPointF extraShapeOffset(shapeOffsetTransform.dx(), shapeOffsetTransform.dy());
@@ -690,7 +730,7 @@ bool SvgParser::parseSymbol(const KoXmlElement &e)
         return false;
     }
 
-    m_symbols << svgSymbol.take();
+    m_symbols.insert(id, svgSymbol.take());
 
     return true;
 }
@@ -1277,7 +1317,7 @@ KoShape* SvgParser::resolveUse(const KoXmlElement &e, const QString& key)
     gc->matrix.translate(parseUnitX(e.attribute("x", "0")), parseUnitY(e.attribute("y", "0")));
 
     const KoXmlElement &referencedElement = m_context.definition(key);
-    result = parseGroup(e, referencedElement);
+    result = parseGroup(e, referencedElement, false);
 
     m_context.popGraphicsContext();
     return result;
@@ -1307,8 +1347,33 @@ QList<KoShape*> SvgParser::parseSvg(const KoXmlElement &e, QSizeF *fragmentSize)
 
     const QString w = e.attribute("width");
     const QString h = e.attribute("height");
-    const qreal width = w.isEmpty() ? 666.0 : parseUnitX(w);
-    const qreal height = h.isEmpty() ? 555.0 : parseUnitY(h);
+
+    qreal width = w.isEmpty() ? 666.0 : parseUnitX(w);
+    qreal height = h.isEmpty() ? 555.0 : parseUnitY(h);
+
+    if (w.isEmpty() || h.isEmpty()) {
+        QRectF viewRect;
+        QTransform viewTransform_unused;
+        QRectF fakeBoundingRect(0.0, 0.0, 1.0, 1.0);
+
+        if (SvgUtil::parseViewBox(e, fakeBoundingRect,
+                                  &viewRect, &viewTransform_unused)) {
+
+            QSizeF estimatedSize = viewRect.size();
+
+            if (estimatedSize.isValid()) {
+
+                if (!w.isEmpty()) {
+                    estimatedSize = QSizeF(width, width * estimatedSize.height() / estimatedSize.width());
+                } else if (!h.isEmpty()) {
+                    estimatedSize = QSizeF(height * estimatedSize.width() / estimatedSize.height(), height);
+                }
+
+                width = estimatedSize.width();
+                height = estimatedSize.height();
+            }
+        }
+    }
 
     QSizeF svgFragmentSize(QSizeF(width, height));
 
@@ -1367,7 +1432,7 @@ void SvgParser::applyViewBoxTransform(const KoXmlElement &element)
     QRectF viewRect = gc->currentBoundingBox;
     QTransform viewTransform;
 
-    if (SvgUtil::parseViewBox(gc, element, gc->currentBoundingBox,
+    if (SvgUtil::parseViewBox(element, gc->currentBoundingBox,
                               &viewRect, &viewTransform)) {
 
         gc->matrix = viewTransform * gc->matrix;
@@ -1398,16 +1463,18 @@ void SvgParser::setFileFetcher(SvgParser::FileFetcherFunc func)
 inline QPointF extraShapeOffset(const KoShape *shape, const QTransform coordinateSystemOnLoading)
 {
     const QTransform shapeToOriginalUserCoordinates =
-        shape->absoluteTransformation(0).inverted() *
+        shape->absoluteTransformation().inverted() *
         coordinateSystemOnLoading;
 
     KIS_SAFE_ASSERT_RECOVER_NOOP(shapeToOriginalUserCoordinates.type() <= QTransform::TxTranslate);
     return QPointF(shapeToOriginalUserCoordinates.dx(), shapeToOriginalUserCoordinates.dy());
 }
 
-KoShape* SvgParser::parseGroup(const KoXmlElement &b, const KoXmlElement &overrideChildrenFrom)
+KoShape* SvgParser::parseGroup(const KoXmlElement &b, const KoXmlElement &overrideChildrenFrom, bool createContext)
 {
-    m_context.pushGraphicsContext(b);
+    if (createContext) {
+        m_context.pushGraphicsContext(b);
+    }
 
     KoShapeGroup *group = new KoShapeGroup();
     group->setZIndex(m_context.nextZIndex());
@@ -1435,7 +1502,9 @@ KoShape* SvgParser::parseGroup(const KoXmlElement &b, const KoXmlElement &overri
 
     applyCurrentStyle(group, extraOffset); // apply style to this group after size is set
 
-    m_context.popGraphicsContext();
+    if (createContext) {
+        m_context.popGraphicsContext();
+    }
 
     return group;
 }
@@ -1472,7 +1541,13 @@ KoShape *SvgParser::parseTextElement(const KoXmlElement &e, KoSvgTextShape *merg
 
     if (e.tagName() == "text") {
         // XXX: Shapes need to be created by their factories
-        rootTextShape = mergeIntoShape ? mergeIntoShape : new KoSvgTextShape();
+        if (mergeIntoShape) {
+            rootTextShape = mergeIntoShape;
+        } else {
+            rootTextShape = new KoSvgTextShape();
+            const QString useRichText = e.attribute("krita:useRichText", "true");
+            rootTextShape->setRichTextPreferred(useRichText != "false");
+        }
     }
 
     if (rootTextShape) {
@@ -1483,7 +1558,10 @@ KoShape *SvgParser::parseTextElement(const KoXmlElement &e, KoSvgTextShape *merg
     uploadStyleToContext(e);
 
     KoSvgTextChunkShape *textChunk = rootTextShape ? rootTextShape : new KoSvgTextChunkShape();
-    textChunk->setZIndex(m_context.nextZIndex());
+
+    if (!mergeIntoShape) {
+        textChunk->setZIndex(m_context.nextZIndex());
+    }
 
     textChunk->loadSvg(e, m_context);
 
@@ -1498,7 +1576,7 @@ KoShape *SvgParser::parseTextElement(const KoXmlElement &e, KoSvgTextShape *merg
         applyId(e.attribute("id"), textChunk);
         applyCurrentStyle(textChunk, extraOffset); // apply style to this group after size is set
     } else {
-        m_context.currentGC()->matrix = mergeIntoShape->absoluteTransformation(0);
+        m_context.currentGC()->matrix = mergeIntoShape->absoluteTransformation();
         applyCurrentBasicStyle(textChunk);
     }
 
@@ -1591,9 +1669,14 @@ QList<KoShape*> SvgParser::parseSingleElement(const KoXmlElement &b, DeferredUse
 
     if (b.tagName() == "svg") {
         shapes += parseSvg(b);
-    } else if (b.tagName() == "g" || b.tagName() == "a") {
+    } else if (b.tagName() == "g" || b.tagName() == "a" || b.tagName() == "symbol") {
         // treat svg link <a> as group so we don't miss its child elements
         shapes += parseGroup(b);
+
+        if (b.tagName() == "symbol") {
+            parseSymbol(b);
+        }
+
     } else if (b.tagName() == "switch") {
         m_context.pushGraphicsContext(b);
         shapes += parseContainer(b);
@@ -1620,8 +1703,6 @@ QList<KoShape*> SvgParser::parseSingleElement(const KoXmlElement &b, DeferredUse
         parseClipMask(b);
     } else if (b.tagName() == "marker") {
         parseMarker(b);
-    } else if (b.tagName() == "symbol") {
-        parseSymbol(b);
     } else if (b.tagName() == "style") {
         m_context.addStyleSheet(b);
     } else if (b.tagName() == "text" ||
@@ -1637,8 +1718,21 @@ QList<KoShape*> SvgParser::parseSingleElement(const KoXmlElement &b, DeferredUse
                b.tagName() == "path" ||
                b.tagName() == "image") {
         KoShape *shape = createObjectDirect(b);
-        if (shape)
-            shapes.append(shape);
+
+        if (shape) {
+            if (!shape->outlineRect().isNull() || !shape->boundingRect().isNull()) {
+                shapes.append(shape);
+            } else {
+                debugFlake << "WARNING: shape is totally empty!" << shape->shapeId() << ppVar(shape->outlineRect());
+                debugFlake << "    " << shape->shapeId() << ppVar(shape->outline());
+                {
+                    QString string;
+                    QTextStream stream(&string);
+                    stream << b;
+                    debugFlake << "    " << string;
+                }
+            }
+        }
     } else if (b.tagName() == "use") {
         KoShape* s = parseUse(b, deferredUseStore);
         if (s) {

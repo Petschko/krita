@@ -33,8 +33,8 @@
 #include <QKeySequence>
 #include <QMetaType>
 #include <QModelIndex>
-#include <QtCore/QList>
-#include <QtCore/QCollator>
+#include <QList>
+#include <QCollator>
 #include <QHBoxLayout>
 
 class QLabel;
@@ -93,8 +93,7 @@ public:
 
     QHash<QString, KActionCollection *> m_collections;
     KisShortcutsDialog *q;
-    KisShortcutsEditor *m_shortcutsEditor;
-
+    KisShortcutsEditor *m_shortcutsEditor {0};
     KShortcutSchemesEditor *m_schemeEditor{0};
 };
 

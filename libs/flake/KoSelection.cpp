@@ -33,22 +33,28 @@
 #include <QPainter>
 
 #include "kis_debug.h"
-
-KoSelection::KoSelection()
-    : KoShape(new KoSelectionPrivate(this))
+KoSelection::KoSelection(QObject *parent)
+    : QObject(parent)
+    , KoShape()
+    , d(new Private)
 {
-    Q_D(KoSelection);
     connect(&d->selectionChangedCompressor, SIGNAL(timeout()), SIGNAL(selectionChanged()));
+}
+
+KoSelection::KoSelection(const KoSelection &rhs)
+    : QObject()
+    , KoShape(rhs)
+    , d(rhs.d)
+{
 }
 
 KoSelection::~KoSelection()
 {
 }
 
-void KoSelection::paint(QPainter &painter, const KoViewConverter &converter, KoShapePaintingContext &paintcontext)
+void KoSelection::paint(QPainter &painter, KoShapePaintingContext &paintcontext) const
 {
     Q_UNUSED(painter);
-    Q_UNUSED(converter);
     Q_UNUSED(paintcontext);
 }
 
@@ -65,27 +71,30 @@ QSizeF KoSelection::size() const
 
 QRectF KoSelection::outlineRect() const
 {
-    Q_D(const KoSelection);
+    const QTransform invertedTransform = transformation().inverted();
+    QRectF boundingRect;
 
-    QPolygonF globalPolygon;
     Q_FOREACH (KoShape *shape, selectedVisibleShapes()) {
-        globalPolygon = globalPolygon.united(
-            shape->absoluteTransformation(0).map(QPolygonF(shape->outlineRect())));
-    }
-    const QPolygonF localPolygon = transformation().inverted().map(globalPolygon);
+        if (!shape->outlineRect().isValid()) continue;
 
-    return localPolygon.boundingRect();
+        // it is cheaper to invert-transform each outline, than
+        // to group 300+ rotated rectangles into a polygon
+        boundingRect |=
+            invertedTransform.map(
+                shape->absoluteTransformation().map(
+                        QPolygonF(shape->outlineRect()))).boundingRect();
+    }
+
+    return boundingRect;
 }
 
 QRectF KoSelection::boundingRect() const
 {
-    Q_D(const KoSelection);
     return KoShape::boundingRect(selectedVisibleShapes());
 }
 
 void KoSelection::select(KoShape *shape)
 {
-    Q_D(KoSelection);
     KIS_SAFE_ASSERT_RECOVER_RETURN(shape != this);
     KIS_SAFE_ASSERT_RECOVER_RETURN(shape);
 
@@ -107,7 +116,7 @@ void KoSelection::select(KoShape *shape)
     shape->addShapeChangeListener(this);
 
     if (d->selectedShapes.size() == 1) {
-        setTransformation(shape->absoluteTransformation(0));
+        setTransformation(shape->absoluteTransformation());
     } else {
         setTransformation(QTransform());
     }
@@ -117,7 +126,6 @@ void KoSelection::select(KoShape *shape)
 
 void KoSelection::deselect(KoShape *shape)
 {
-    Q_D(KoSelection);
     if (!d->selectedShapes.contains(shape))
         return;
 
@@ -125,7 +133,7 @@ void KoSelection::deselect(KoShape *shape)
     shape->removeShapeChangeListener(this);
 
     if (d->selectedShapes.size() == 1) {
-        setTransformation(d->selectedShapes.first()->absoluteTransformation(0));
+        setTransformation(d->selectedShapes.first()->absoluteTransformation());
     }
 
     d->selectionChangedCompressor.start();
@@ -133,7 +141,6 @@ void KoSelection::deselect(KoShape *shape)
 
 void KoSelection::deselectAll()
 {
-    Q_D(KoSelection);
 
     if (d->selectedShapes.isEmpty())
         return;
@@ -151,13 +158,11 @@ void KoSelection::deselectAll()
 
 int KoSelection::count() const
 {
-    Q_D(const KoSelection);
     return d->selectedShapes.size();
 }
 
 bool KoSelection::hitTest(const QPointF &position) const
 {
-    Q_D(const KoSelection);
 
     Q_FOREACH (KoShape *shape, d->selectedShapes) {
         if (shape->isVisible()) continue;
@@ -169,14 +174,11 @@ bool KoSelection::hitTest(const QPointF &position) const
 
 const QList<KoShape*> KoSelection::selectedShapes() const
 {
-    Q_D(const KoSelection);
     return d->selectedShapes;
 }
 
 const QList<KoShape *> KoSelection::selectedVisibleShapes() const
 {
-    Q_D(const KoSelection);
-
     QList<KoShape*> shapes = selectedShapes();
 
     KritaUtils::filterContainer (shapes, [](KoShape *shape) {
@@ -188,8 +190,6 @@ const QList<KoShape *> KoSelection::selectedVisibleShapes() const
 
 const QList<KoShape *> KoSelection::selectedEditableShapes() const
 {
-    Q_D(const KoSelection);
-
     QList<KoShape*> shapes = selectedShapes();
 
     KritaUtils::filterContainer (shapes, [](KoShape *shape) {
@@ -217,7 +217,6 @@ const QList<KoShape *> KoSelection::selectedEditableShapesAndDelegates() const
 
 bool KoSelection::isSelected(const KoShape *shape) const
 {
-    Q_D(const KoSelection);
     if (shape == this)
         return true;
 
@@ -231,28 +230,23 @@ bool KoSelection::isSelected(const KoShape *shape) const
 
 KoShape *KoSelection::firstSelectedShape() const
 {
-    Q_D(const KoSelection);
     return !d->selectedShapes.isEmpty() ? d->selectedShapes.first() : 0;
 }
 
 void KoSelection::setActiveLayer(KoShapeLayer *layer)
 {
-    Q_D(KoSelection);
     d->activeLayer = layer;
     emit currentLayerChanged(layer);
 }
 
 KoShapeLayer* KoSelection::activeLayer() const
 {
-    Q_D(const KoSelection);
     return d->activeLayer;
 }
 
 void KoSelection::notifyShapeChanged(KoShape::ChangeType type, KoShape *shape)
 {
     Q_UNUSED(shape);
-    Q_D(KoSelection);
-
     if (type == KoShape::Deleted) {
         deselect(shape);
 

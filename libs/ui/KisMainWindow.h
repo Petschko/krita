@@ -37,7 +37,7 @@ class QCloseEvent;
 class QMoveEvent;
 
 struct KoPageLayout;
-class KoCanvasResourceManager;
+class KoCanvasResourceProvider;
 
 class KisDocument;
 class KisPrintJob;
@@ -86,11 +86,10 @@ public:
     QUuid id() const;
 
     /**
-     * @brief showView shows the given view. Override this if you want to show
-     * the view in a different way than by making it the central widget, for instance
-     * as an QMdiSubWindow
+     * @brief showView shows the given view, in @p subWindow if not
+     * null, in a new tab otherwise.
      */
-    virtual void showView(KisView *view);
+    virtual void showView(KisView *view, QMdiSubWindow *subWindow = 0);
 
     /**
      * @returns the currently active view
@@ -104,18 +103,18 @@ public:
 
     /**
      * The document opened a URL -> store into recent documents list.
+     * @param oldUrl if not empty, @p url will replace @p oldUrl if present
      */
-    void addRecentURL(const QUrl &url);
+    void addRecentURL(const QUrl &url, const QUrl &oldUrl = QUrl());
 
     /**
      * get list of URL strings for recent files
      */
     QList<QUrl> recentFilesUrls();
-
     /**
-     * clears the list of the recent files
+     * removes the given url from the list of recent files
      */
-    void clearRecentFiles();
+    void removeRecentUrl(const QUrl &url);
 
 
     /**
@@ -142,7 +141,6 @@ public:
      */
     void showWelcomeScreen(bool show);
 
-
     /**
      * Saves the document, asking for a filename if necessary.
      *
@@ -164,7 +162,7 @@ public:
 
     QList<KoCanvasObserverBase*> canvasObservers() const override;
 
-    KoCanvasResourceManager *resourceManager() const;
+    KoCanvasResourceProvider *resourceManager() const;
 
     int viewCount() const;
 
@@ -184,9 +182,16 @@ public:
 
     KisViewManager *viewManager() const;
 
-    KisView *addViewAndNotifyLoadingCompleted(KisDocument *document);
+    KisView *addViewAndNotifyLoadingCompleted(KisDocument *document,
+                                              QMdiSubWindow *subWindow = 0);
 
     QStringList showOpenFileDialog(bool isImporting);
+
+    /**
+     * The top-level window used for a detached canvas.
+     */
+    QWidget *canvasWindow() const;
+    bool canvasDetached() const;
 
     /**
      * Shows if the main window is saving anything right now. If the
@@ -226,7 +231,17 @@ Q_SIGNALS:
 
     void guiLoadingFinished();
 
+    /// emitted when the window is migrated among different screens
+    void screenChanged();
+
 public Q_SLOTS:
+
+
+    /**
+     * clears the list of the recent files
+     */
+    void clearRecentFiles();
+
 
     /**
      *  Slot for opening a new document.
@@ -279,7 +294,7 @@ public Q_SLOTS:
      */
     void newOptionWidgets(KoCanvasController *controller, const QList<QPointer<QWidget> > & optionWidgetList);
 
-    KisView *newView(QObject *document);
+    KisView *newView(QObject *document, QMdiSubWindow *subWindow = 0);
 
     void notifyChildViewDestroyed(KisView *view);
 
@@ -295,7 +310,18 @@ public Q_SLOTS:
      */
     void reloadRecentFileList();
 
+    /**
+     * Detach canvas onto a separate window, or restore it back to to main window.
+     */
+    void setCanvasDetached(bool detached);
 
+    void slotFileSelected(QString path);
+    void slotEmptyFilePath();
+
+    /**
+     * Toggle full screen on/off.
+     */
+    void viewFullscreen(bool fullScreen);
 
 private Q_SLOTS:
     /**
@@ -365,11 +391,6 @@ private Q_SLOTS:
     void slotToolbarToggled(bool toggle);
 
     /**
-     * Toggle full screen on/off.
-     */
-    void viewFullscreen(bool fullScreen);
-
-    /**
      * Reload file
      */
     void slotReloadFile();
@@ -402,6 +423,7 @@ private Q_SLOTS:
     void undo();
     void redo();
     void updateWindowMenu();
+    void updateSubwindowFlags();
     void setActiveSubWindow(QWidget *window);
     void configChanged();
 
@@ -416,6 +438,9 @@ private Q_SLOTS:
     void showManual();
     void switchTab(int index);
 
+    void windowScreenChanged(QScreen *screen);
+
+    void slotXmlGuiMakingChanges(bool finished);
 
 protected:
 
@@ -423,13 +448,12 @@ protected:
     void resizeEvent(QResizeEvent * e) override;
 
     // QWidget overrides
-    void dragEnterEvent(QDragEnterEvent * event) override;
-    void dropEvent(QDropEvent * event) override;
-    void dragMoveEvent(QDragMoveEvent * event) override;
-    void dragLeaveEvent(QDragLeaveEvent * event) override;
 
-    void moveEvent(QMoveEvent *e) override;
+private:
 
+    friend class KisWelcomePageWidget;
+    void dragMove(QDragMoveEvent *event);
+    void dragLeave();
 
 private:
 
@@ -438,7 +462,7 @@ private:
      * This is a private implementation. For public usage please use
      * newView() and addViewAndNotifyLoadingCompleted().
      */
-    void addView(KisView *view);
+    void addView(KisView *view, QMdiSubWindow *subWindow = 0);
 
     friend class KisPart;
 
@@ -457,7 +481,7 @@ private:
     /**
      * Updates the window caption based on the document info and path.
      */
-    void updateCaption(const QString & caption, bool mod);
+    void updateCaption(const QString & caption, bool modified);
     void updateReloadFileAction(KisDocument *doc);
 
     void saveWindowSettings();
@@ -492,7 +516,6 @@ private:
 
     QString m_errorMessage;
     bool m_dieOnError;
-
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(KisMainWindow::OpenFlags)

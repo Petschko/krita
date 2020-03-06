@@ -24,13 +24,13 @@
 
 #include <kis_image.h>
 #include "KisView.h"
+#include <KisSelectionTags.h>
 
 #include <kritaui_export.h>
 
 class KisActionManager;
 class KisAction;
 class QAction;
-class KoViewConverter;
 class KisDocument;
 
 class KisViewManager;
@@ -84,6 +84,7 @@ public Q_SLOTS:
     void paste();
     void pasteNew();
     void pasteAt();
+    void pasteAsReference();
     void cutToNewLayer();
     void selectAll();
     void deselect();
@@ -96,7 +97,9 @@ public Q_SLOTS:
     void fillBackgroundColorOpacity();
     void fillPatternOpacity();
     void reselect();
+    void editSelection();
     void convertToVectorSelection();
+    void convertToRasterSelection();
     void convertShapesToVectorSelection();
     void convertToShape();
     
@@ -111,6 +114,8 @@ public Q_SLOTS:
 
     void slotStrokeSelection();
 
+    void selectOpaqueOnNode(KisNodeSP node, SelectionAction action);
+
 Q_SIGNALS:
     void currentSelectionChanged();
     void signalUpdateGUI();
@@ -124,43 +129,46 @@ public:
     bool haveShapesInClipboard();
 
     /// Checks if the current selection is editable and has some pixels selected in the pixel selection
-    bool havePixelSelectionWithPixels();
+    bool haveAnySelectionWithPixels();
+    bool haveShapeSelectionWithShapes();
+    bool haveRasterSelectionWithPixels();
 
 private:
     void fill(const KoColor& color, bool fillWithPattern, const QString& transactionText);
     void updateStatusBar();
 
-    KisViewManager * m_view;
-    KisDocument * m_doc;
-    QPointer<KisView>m_imageView;
-    KisClipboard * m_clipboard;
+    KisViewManager * m_view {0};
+    KisDocument * m_doc {0};
+    QPointer<KisView>m_imageView {0};
+    KisClipboard * m_clipboard {0};
 
-    KisNodeCommandsAdapter* m_adapter;
+    KisNodeCommandsAdapter* m_adapter {0};
 
-    KisAction *m_copy;
-    KisAction *m_copyMerged;
-    KisAction *m_cut;
-    KisAction *m_paste;
-    KisAction *m_pasteAt;
-    KisAction *m_pasteNew;
-    KisAction *m_cutToNewLayer;
-    KisAction *m_selectAll;
-    KisAction *m_deselect;
-    KisAction *m_clear;
-    KisAction *m_reselect;
-    KisAction *m_invert;
-    KisAction *m_copyToNewLayer;
-    KisAction *m_fillForegroundColor;
-    KisAction *m_fillBackgroundColor;
-    KisAction *m_fillPattern;
-    KisAction *m_fillForegroundColorOpacity;
-    KisAction *m_fillBackgroundColorOpacity;
-    KisAction *m_fillPatternOpacity;
-    KisAction *m_imageResizeToSelection;
-    KisAction *m_strokeShapes;
-    KisAction *m_toggleDisplaySelection;
-    KisAction *m_toggleSelectionOverlayMode;
-    KisAction *m_strokeSelected;
+    KisAction *m_copy {0};
+    KisAction *m_copyMerged {0};
+    KisAction *m_cut {0};
+    KisAction *m_paste {0};
+    KisAction *m_pasteAt {0};
+    KisAction *m_pasteAsReference {0};
+    KisAction *m_pasteNew {0};
+    KisAction *m_cutToNewLayer {0};
+    KisAction *m_selectAll {0};
+    KisAction *m_deselect {0};
+    KisAction *m_clear {0};
+    KisAction *m_reselect {0};
+    KisAction *m_invert {0};
+    KisAction *m_copyToNewLayer {0};
+    KisAction *m_fillForegroundColor {0};
+    KisAction *m_fillBackgroundColor {0};
+    KisAction *m_fillPattern {0};
+    KisAction *m_fillForegroundColorOpacity {0};
+    KisAction *m_fillBackgroundColorOpacity {0};
+    KisAction *m_fillPatternOpacity {0};
+    KisAction *m_imageResizeToSelection {0};
+    KisAction *m_strokeShapes {0};
+    KisAction *m_toggleDisplaySelection {0};
+    KisAction *m_toggleSelectionOverlayMode {0};
+    KisAction *m_strokeSelected {0};
 
 
     QList<QAction*> m_pluginActions;

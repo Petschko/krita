@@ -3,7 +3,8 @@
  *
  *  This library is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU Lesser General Public License as published by
- *  the Free Software Foundation; version 2.1 of the License.
+ *  the Free Software Foundation; version 2 of the License, or
+ *  (at your option) any later version.
  *
  *  This library is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
@@ -66,6 +67,9 @@ KisSelectionDecoration::KisSelectionDecoration(QPointer<KisView>view)
     connect(m_antsTimer, SIGNAL(timeout()), SLOT(antsAttackEvent()));
 
     connect(&m_signalCompressor, SIGNAL(timeout()), SLOT(slotStartUpdateSelection()));
+
+    // selections should be at the top of the stack
+    setPriority(100);
 }
 
 KisSelectionDecoration::~KisSelectionDecoration()

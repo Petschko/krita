@@ -176,7 +176,7 @@ public:
             // get the filter rectangle in shape coordinates
             QRectF filterRect = currentEffect->filterRectForBoundingRect(sizeRect);
             // get the transformation from document to shape coordinates
-            QTransform transform = currentShape->absoluteTransformation(0).inverted();
+            QTransform transform = currentShape->absoluteTransformation().inverted();
             // adjust filter rectangle by grab sensitivity
             const int grabDistance = tool->grabSensitivity();
             QPointF border = tool->canvas()->viewConverter()->viewToDocument(QPointF(grabDistance, grabDistance));
@@ -236,10 +236,9 @@ void KarbonFilterEffectsTool::paint(QPainter &painter, const KoViewConverter &co
     if (d->currentShape && d->currentShape->filterEffectStack()) {
         painter.save();
         // apply the shape transformation
-        QTransform transform = d->currentShape->absoluteTransformation(&converter);
-        painter.setTransform(transform, true);
-        // apply the zoom transformation
-        KoShape::applyConversion(painter, converter);
+
+        QTransform transform = d->currentShape->absoluteTransformation();
+        painter.setTransform(transform * converter.documentToView(), true);
         // get the size rect of the shape
         QRectF sizeRect(QPointF(), d->currentShape->size());
         // get the clipping rect of the filter stack
@@ -517,25 +516,25 @@ QList<QPointer<QWidget> > KarbonFilterEffectsTool::createOptionWidgets()
     QGridLayout *filterRegionLayout = new QGridLayout(filterRegionWidget);
 
     d->posX = new KisDoubleParseSpinBox(filterRegionWidget);
-    d->posX->setSuffix("%");
+    d->posX->setSuffix(i18n("%"));
     connect(d->posX, SIGNAL(valueChanged(double)), this, SLOT(regionXChanged(double)));
     filterRegionLayout->addWidget(new QLabel(i18n("X:")), 0, 0);
     filterRegionLayout->addWidget(d->posX, 0, 1);
 
     d->posY = new KisDoubleParseSpinBox(filterRegionWidget);
-    d->posY->setSuffix("%");
+    d->posY->setSuffix(i18n("%"));
     connect(d->posY, SIGNAL(valueChanged(double)), this, SLOT(regionYChanged(double)));
     filterRegionLayout->addWidget(new QLabel(i18n("Y:")), 1, 0);
     filterRegionLayout->addWidget(d->posY, 1, 1);
 
     d->posW = new KisDoubleParseSpinBox(filterRegionWidget);
-    d->posW->setSuffix("%");
+    d->posW->setSuffix(i18n("%"));
     connect(d->posW, SIGNAL(valueChanged(double)), this, SLOT(regionWidthChanged(double)));
     filterRegionLayout->addWidget(new QLabel(i18n("W:")), 0, 2);
     filterRegionLayout->addWidget(d->posW, 0, 3);
 
     d->posH = new KisDoubleParseSpinBox(filterRegionWidget);
-    d->posH->setSuffix("%");
+    d->posH->setSuffix(i18n("%"));
     connect(d->posH, SIGNAL(valueChanged(double)), this, SLOT(regionHeightChanged(double)));
     filterRegionLayout->addWidget(new QLabel(i18n("H:")), 1, 2);
     filterRegionLayout->addWidget(d->posH, 1, 3);

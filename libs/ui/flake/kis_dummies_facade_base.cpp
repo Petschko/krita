@@ -94,7 +94,17 @@ KisNodeSP KisDummiesFacadeBase::findFirstLayer(KisNodeSP root)
 
 void KisDummiesFacadeBase::slotNodeChanged(KisNodeSP node)
 {
-    emit sigDummyChanged(dummyForNode(node));
+    KisNodeDummy *dummy = dummyForNode(node);
+
+    /**
+     * In some "buggy" code the node-changed signal may be emitted
+     * before the node will become a part of the node graph. It is
+     * a bug, we a really minor one. It should not cause any data
+     * losses to the user.
+     */
+    KIS_SAFE_ASSERT_RECOVER_RETURN(dummy);
+
+    emit sigDummyChanged(dummy);
 }
 
 void KisDummiesFacadeBase::slotLayersChanged()
@@ -106,7 +116,10 @@ void KisDummiesFacadeBase::slotNodeActivationRequested(KisNodeSP node)
 {
     if (!node->graphListener()) return;
 
-    if (!node->inherits("KisSelectionMask") && !node->inherits("KisReferenceImagesLayer")) {
+    if (!node->inherits("KisSelectionMask") &&
+        !node->inherits("KisReferenceImagesLayer") &&
+        !node->inherits("KisDecorationsWrapperLayer")) {
+
         emit sigActivateNode(node);
     }
 }
